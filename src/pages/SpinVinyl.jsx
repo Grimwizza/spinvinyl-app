@@ -33,7 +33,7 @@ const PWAHelp = () => {
                     </div>
                     <div className="flex-1 text-left">
                         <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-1.5">
-                            Best Experience <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-bold tracking-tight">PWA AVAILABLE</span>
+                            Best Experience <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-bold tracking-tight">WEB APP AVAILABLE</span>
                         </h3>
 
                         {platform === 'ios' && (
