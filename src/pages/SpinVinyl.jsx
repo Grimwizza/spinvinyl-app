@@ -576,7 +576,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                                     Side {side}
                                                 </span>
                                                 <div className="flex-1 h-px bg-white/5" />
-                                                <span className="text-[10px] text-gray-600">
+                                                <span className="text-[10px] text-gray-500">
                                                     {sides[side].filter(t => t.durationSeconds > 0).length > 0
                                                         ? formatTime(sides[side].reduce((sum, t) => sum + t.durationSeconds, 0))
                                                         : ''}
@@ -585,13 +585,13 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                             <div className="space-y-0.5">
                                                 {sides[side].map((track, idx) => (
                                                     <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/[0.03] transition-colors group">
-                                                        <span className="text-xs text-gray-600 w-6 text-right tabular-nums font-medium">
+                                                        <span className="text-xs text-gray-500 w-6 text-right tabular-nums font-medium">
                                                             {track.position || idx + 1}
                                                         </span>
                                                         <span className="flex-1 text-sm text-gray-300 group-hover:text-white transition-colors truncate">
                                                             {track.title}
                                                         </span>
-                                                        <span className="text-xs text-gray-600 tabular-nums">
+                                                        <span className="text-xs text-gray-500 tabular-nums">
                                                             {track.duration || '—'}
                                                         </span>
                                                     </div>
@@ -943,12 +943,12 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                                                             {isCurrent ? (
                                                                 <Volume2 size={16} className="text-violet-400 animate-pulse flex-shrink-0" />
                                                             ) : (
-                                                                <span className="w-5 text-right font-medium text-gray-600 flex-shrink-0">{track.position || idx + 1}</span>
+                                                                <span className="w-5 text-right font-medium text-gray-500 flex-shrink-0">{track.position || idx + 1}</span>
                                                             )}
                                                             <span className={`flex-1 min-w-0 truncate ${isCurrent ? 'font-bold' : ''}`}>
                                                                 {track.title}
                                                             </span>
-                                                            <span className="text-sm font-medium tabular-nums opacity-60">
+                                                            <span className="text-sm font-medium tabular-nums opacity-80">
                                                                 {track.duration || '—'}
                                                             </span>
                                                         </div>
