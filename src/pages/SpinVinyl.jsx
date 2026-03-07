@@ -1365,7 +1365,7 @@ export const SpinVinyl = () => {
                                     }}
                                     className="p-2 px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
                                 >
-                                    <span>Exit</span>
+                                    <span>Log Out</span>
                                 </button>
                             </div>
 
