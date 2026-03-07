@@ -1287,7 +1287,7 @@ export const SpinVinyl = () => {
                             </div>
                             <div className="flex flex-col">
                                 <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent leading-tight sm:leading-none">Spin Vinyl</h1>
-                                <p className="text-xs sm:text-sm text-violet-300/60 font-medium tracking-widest uppercase mt-0.5 sm:mt-1">Analog sound, digital order.</p>
+                                <p className="text-xs sm:text-sm text-violet-300/60 font-medium tracking-widest uppercase mt-0.5 sm:mt-1">The Ultimate Discogs Listening Companion</p>
                             </div>
                         </div>
 
