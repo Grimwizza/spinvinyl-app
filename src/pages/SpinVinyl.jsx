@@ -153,13 +153,13 @@ const useSpinPWA = () => {
 
 // ─── Sort Options ───────────────────────────────────────────────
 const SORT_OPTIONS = [
+    { value: 'added-desc', label: 'Recently Added', icon: Calendar, field: 'added', order: 'desc', apiSort: 'added', apiOrder: 'desc' },
     { value: 'year-desc', label: 'Year (Newest)', icon: Calendar, field: 'year', order: 'desc', apiSort: 'artist', apiOrder: 'asc' },
+    { value: 'year-asc', label: 'Year (Oldest)', icon: Calendar, field: 'year', order: 'asc', apiSort: 'artist', apiOrder: 'asc' },
     { value: 'artist-asc', label: 'Artist A→Z', icon: User, field: 'artist', order: 'asc', apiSort: 'artist', apiOrder: 'asc' },
     { value: 'artist-desc', label: 'Artist Z→A', icon: User, field: 'artist', order: 'desc', apiSort: 'artist', apiOrder: 'desc' },
     { value: 'title-asc', label: 'Title A→Z', icon: Tag, field: 'title', order: 'asc', apiSort: 'artist', apiOrder: 'asc' },
     { value: 'title-desc', label: 'Title Z→A', icon: Tag, field: 'title', order: 'desc', apiSort: 'artist', apiOrder: 'asc' },
-    { value: 'year-asc', label: 'Year (Oldest)', icon: Calendar, field: 'year', order: 'asc', apiSort: 'artist', apiOrder: 'asc' },
-    { value: 'added-desc', label: 'Recently Added', icon: Calendar, field: 'added', order: 'desc', apiSort: 'added', apiOrder: 'desc' },
     { value: 'added-asc', label: 'First Added', icon: Calendar, field: 'added', order: 'asc', apiSort: 'added', apiOrder: 'asc' },
     { value: 'label-asc', label: 'Label A→Z', icon: Tag, field: 'label', order: 'asc', apiSort: 'artist', apiOrder: 'asc' },
 ];
@@ -1123,7 +1123,7 @@ export const SpinVinyl = () => {
 
     // View & Sort State
     const [viewMode, setViewMode] = useState(() => localStorage.getItem('vinylView') || 'grid');
-    const [sortBy, setSortBy] = useState(() => localStorage.getItem('vinylSort') || 'year-desc');
+    const [sortBy, setSortBy] = useState(() => localStorage.getItem('vinylSort') || 'added-desc');
     const [showSortMenu, setShowSortMenu] = useState(false);
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
