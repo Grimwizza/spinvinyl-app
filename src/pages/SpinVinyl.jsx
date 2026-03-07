@@ -1340,56 +1340,53 @@ export const SpinVinyl = () => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent_50%)]" />
                 <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-16 pb-4 sm:pb-12">
-                    {/* Header Row */}
-                    <div className="flex items-start justify-between mb-8 sm:mb-12">
-                        <div className="flex items-center gap-2 sm:gap-4">
-                            <div className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-full bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center flex-shrink-0 overflow-hidden shadow-lg border border-white/10">
-                                {nowSpinning?.cover ? (
-                                    <img src={nowSpinning.cover} alt="" className="w-full h-full object-cover animate-spin-slow" style={{ animationDuration: '4s' }} />
-                                ) : (
-                                    <>
-                                        <Disc3 size={20} className="text-white sm:hidden" />
-                                        <Disc3 size={28} className="text-white hidden sm:block md:hidden" />
-                                        <Disc3 size={32} className="text-white hidden md:block" />
-                                    </>
-                                )}
+                    {/* Header Row — Stacked on mobile, side-by-side on tablet+ */}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 text-center sm:text-left">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-violet-600 via-violet-500 to-pink-500 flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-2xl border border-white/20 group/logo">
+                                <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.1),transparent)] animate-spin-slow" style={{ animationDuration: '8s' }} />
+                                <Disc3 size={24} className="text-white sm:hidden relative z-10" />
+                                <Disc3 size={32} className="text-white hidden sm:block md:hidden relative z-10" />
+                                <Disc3 size={40} className="text-white hidden md:block relative z-10" />
+                                <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none" />
                             </div>
-                            <div className="flex flex-col">
+                            <div className="flex flex-col items-center sm:items-start max-w-[280px] sm:max-w-none">
                                 <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent leading-tight sm:leading-none">Spin Vinyl</h1>
-                                <p className="text-xs sm:text-sm text-violet-300/60 font-medium tracking-widest uppercase mt-0.5 sm:mt-1">The Ultimate Discogs® Listening Companion</p>
+                                <p className="text-[10px] sm:text-sm text-violet-300/60 font-medium tracking-widest uppercase mt-1 sm:mt-1 leading-relaxed">The Ultimate Discogs® Listening Companion</p>
                             </div>
                         </div>
 
-                        {/* Profile / Logout */}
-                        <div className="flex items-center gap-3">
+                        {/* Profile / Logout / Random */}
+                        <div className="flex flex-col items-center sm:items-end gap-3 w-full sm:w-auto">
+                            <div className="flex items-center justify-center sm:justify-end gap-3 w-full">
+                                <div className="flex flex-col items-end border-l border-white/10 pl-3">
+                                    <span className="text-sm font-bold text-white max-w-[120px] truncate">{authUsername}</span>
+                                    <span className="text-[10px] uppercase tracking-wider text-green-400 font-bold flex items-center gap-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        await fetch('/api/discogs?action=logout');
+                                        setIsAuthenticated(false);
+                                        setReleases([]);
+                                        setTotalItems(0);
+                                    }}
+                                    className="p-2 px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
+                                >
+                                    <span>Exit</span>
+                                </button>
+                            </div>
+
                             {releases.length > 0 && (
                                 <button
                                     onClick={() => { const pick = releases[Math.floor(Math.random() * releases.length)]; handleAlbumClick(pick); }}
-                                    className="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-gradient-to-r from-violet-600/80 to-pink-600/80 hover:from-violet-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-violet-500/20 transition-all hover:scale-[1.03] active:scale-[0.97] min-h-[44px] flex-shrink-0"
+                                    className="flex items-center justify-center gap-1.5 px-6 py-2.5 sm:px-4 sm:py-2 rounded-xl bg-gradient-to-r from-violet-600/80 to-pink-600/80 hover:from-violet-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-violet-500/20 transition-all hover:scale-[1.03] active:scale-[0.97] min-h-[44px] w-full sm:w-fit"
                                 >
-                                    <Shuffle size={16} />
-                                    <span className="hidden sm:inline">Random Pick</span>
-                                    <span className="sm:hidden">Random</span>
+                                    <Shuffle size={14} className="sm:size-[16px]" />
+                                    <span>Random Pick</span>
                                 </button>
                             )}
-                            <div className="hidden sm:flex flex-col items-end border-l border-white/10 pl-3 ml-1">
-                                <span className="text-sm font-bold text-white">{authUsername}</span>
-                                <span className="text-[10px] uppercase tracking-wider text-green-400 font-bold flex items-center gap-1">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
-                                </span>
-                            </div>
-                            <button
-                                onClick={async () => {
-                                    await fetch('/api/discogs?action=logout');
-                                    setIsAuthenticated(false);
-                                    setReleases([]);
-                                    setTotalItems(0);
-                                }}
-                                className="p-2 sm:px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
-                            >
-                                <span className="hidden sm:inline">Disconnect</span>
-                                <span className="sm:hidden">Exit</span>
-                            </button>
                         </div>
                     </div>
 
