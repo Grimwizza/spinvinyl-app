@@ -556,9 +556,17 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                         {albumNotes}
                                     </p>
                                     {detail?.uri && (
-                                        <a href={`https://www.discogs.com${detail.uri}`} target="_blank" rel="noopener noreferrer" className="inline-block mt-2 text-xs font-semibold text-pink-400 hover:text-pink-300 transition-colors">
-                                            View on Discogs →
-                                        </a>
+                                        <div className="flex flex-col gap-1 mt-4 border-t border-white/5 pt-3">
+                                            <a
+                                                href={`https://www.discogs.com${detail.uri}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-block text-xs font-semibold text-pink-400 hover:text-pink-300 transition-colors"
+                                            >
+                                                View on Discogs →
+                                            </a>
+                                            <span className="text-[10px] text-gray-500">Data provided by Discogs</span>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -1572,10 +1580,20 @@ export const SpinVinyl = () => {
                     {!loading && !error && filteredAndSorted.length === 0 && searchQuery && (
                         <div className="text-center py-20"><p className="text-gray-500">No records match "{searchQuery}"</p></div>
                     )}
-
-
                 </div>
             </div>
+
+            {/* Disclaimer Footer */}
+            <footer className="w-full py-8 mt-12 border-t border-white/5 px-6">
+                <div className="max-w-7xl mx-auto flex flex-col items-center gap-4 text-center">
+                    <p className="text-[10px] text-gray-500 max-w-2xl leading-relaxed">
+                        This application uses Discogs’ API but is not affiliated with, sponsored or endorsed by Discogs. ‘Discogs’ is a trademark of Zink Media, LLC.
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-600 tracking-tight">Spin Vinyl © {new Date().getFullYear()}</span>
+                    </div>
+                </div>
+            </footer>
 
             {/* Album Detail Modal */}
             {selectedAlbum && (
