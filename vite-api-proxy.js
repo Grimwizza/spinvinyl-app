@@ -1,5 +1,6 @@
 
 import discogsHandler from './api/discogs.js';
+import lyricsHandler from './api/lyrics.js';
 
 // Helper to mock Vercel/Express 'res' object for Serverless Functions
 const mockResponse = (resolve, res) => {
@@ -100,6 +101,28 @@ export const apiMiddleware = () => ({
                         try {
                             // CRITICAL: Await the handler since it's async
                             await discogsHandler(req, mockedRes);
+                        } catch (handlerErr) {
+                            reject(handlerErr);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/lyrics ---
+            if (url === '/lyrics') {
+                try {
+                    await new Promise(async (resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        try {
+                            await lyricsHandler(req, mockedRes);
                         } catch (handlerErr) {
                             reject(handlerErr);
                         }

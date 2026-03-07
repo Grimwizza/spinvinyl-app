@@ -707,23 +707,14 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
 
     const fetchLyricsWithFallback = useCallback(async (artist, title) => {
         try {
-            // Primary: lyrics.ovh
-            const res = await fetch(`https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`);
+            const res = await fetch(`/api/lyrics?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.lyrics) return data.lyrics;
             }
-
-            // Fallback: LRCLIB
-            const lrclibRes = await fetch(`https://lrclib.net/api/search?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist)}`);
-            if (lrclibRes.ok) {
-                const lrclibData = await lrclibRes.json();
-                if (lrclibData && lrclibData.length > 0 && lrclibData[0].plainLyrics) {
-                    return lrclibData[0].plainLyrics;
-                }
-            }
             return 'Lyrics not available for this track.';
-        } catch {
+        } catch (error) {
+            console.error('[Lyrics Fetch] Error:', error);
             return 'Lyrics not available for this track.';
         }
     }, []);
