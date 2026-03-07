@@ -1057,7 +1057,7 @@ export const SpinVinyl = () => {
 
     // View & Sort State
     const [viewMode, setViewMode] = useState(() => localStorage.getItem('vinylView') || 'grid');
-    const [sortBy, setSortBy] = useState(() => localStorage.getItem('vinylSort') || 'artist-asc');
+    const [sortBy, setSortBy] = useState(() => localStorage.getItem('vinylSort') || 'year-desc');
     const [showSortMenu, setShowSortMenu] = useState(false);
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
