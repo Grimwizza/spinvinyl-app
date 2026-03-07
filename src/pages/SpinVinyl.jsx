@@ -1324,12 +1324,7 @@ export const SpinVinyl = () => {
                         </div>
                     </div>
 
-                    {/* Collection Stats Row */}
-                    <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm sm:text-lg text-gray-400 max-w-xl font-medium">
-                            {totalItems > 0 ? `${totalItems} total records in your collection` : 'Loading collection…'}
-                        </p>
-                    </div>
+
                 </div>
 
                 {/* Main Content */}
