@@ -1,5 +1,72 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star } from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info } from 'lucide-react';
+
+// ─── PWA Help / Installation Instructions ──────────────────────
+const PWAHelp = () => {
+    const [platform, setPlatform] = useState('other');
+    const [isDismissed, setIsDismissed] = useState(() => localStorage.getItem('pwaPromptDismissed') === 'true');
+
+    useEffect(() => {
+        const ua = window.navigator.userAgent.toLowerCase();
+        if (/iphone|ipad|ipod/.test(ua)) setPlatform('ios');
+        else if (/android/.test(ua)) setPlatform('android');
+        else if (!window.matchMedia('(display-mode: standalone)').matches) setPlatform('desktop');
+    }, []);
+
+    if (isDismissed || window.matchMedia('(display-mode: standalone)').matches) return null;
+
+    const handleDismiss = () => {
+        setIsDismissed(true);
+        localStorage.setItem('pwaPromptDismissed', 'true');
+    };
+
+    return (
+        <div className="w-full max-w-sm mx-auto mb-8 animate-fade-in">
+            <div className="relative group overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500/10 to-pink-500/10 border border-white/10 backdrop-blur-md p-5">
+                <button onClick={handleDismiss} className="absolute top-3 right-3 p-1 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+                    <X size={14} />
+                </button>
+
+                <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-violet-500/20">
+                        <Download size={20} className="text-white" />
+                    </div>
+                    <div className="flex-1 text-left">
+                        <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-1.5">
+                            Best Experience <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 font-bold tracking-tight">PWA AVAILABLE</span>
+                        </h3>
+
+                        {platform === 'ios' && (
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                Tap <span className="inline-flex items-center px-1 py-0.5 rounded bg-white/10 text-white mx-0.5"><Share size={10} className="mr-1" /> Share</span> then select
+                                <span className="text-white font-semibold mx-1">"Add to Home Screen"</span> for native fullscreen playback.
+                            </p>
+                        )}
+
+                        {platform === 'android' && (
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                Tap <span className="inline-flex items-center px-1 py-0.5 rounded bg-white/10 text-white mx-0.5"><MoreVertical size={10} className="mr-1" /> Menu</span> and select
+                                <span className="text-white font-semibold mx-1">"Install App"</span> to add to your home screen.
+                            </p>
+                        )}
+
+                        {platform === 'desktop' && (
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                Click the <span className="text-white font-semibold mx-1">Install Icon</span> in your browser's address bar to run Spin Vinyl as a standalone app.
+                            </p>
+                        )}
+
+                        {platform === 'other' && (
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                Use your browser's <span className="text-white font-semibold mx-1">"Install"</span> or <span className="text-white font-semibold mx-1">"Add to Home Screen"</span> feature for the best experience.
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // ─── Star Rating Display ────────────────────────────────────────
 const StarRating = ({ rating, size = 10 }) => {
@@ -1243,6 +1310,8 @@ export const SpinVinyl = () => {
                     <p className="text-gray-400 text-lg mb-10 max-w-sm mx-auto">
                         Your physical record collection, beautifully visualized for a digital listening experience.
                     </p>
+
+                    <PWAHelp />
 
                     <a
                         href="/api/discogs?action=login"
