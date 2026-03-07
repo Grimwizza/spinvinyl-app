@@ -784,7 +784,7 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
     return (
         <>
             {expanded ? (
-                <div className="fixed inset-0 z-[100] bg-gray-950 flex flex-col md:flex-row overflow-hidden animate-slide-up">
+                <div className="fixed inset-0 z-[100] bg-gray-950 flex flex-col md:flex-row h-[100dvh] overflow-hidden animate-slide-up">
                     {/* Background Glass/Blur Effects */}
                     <div className="absolute inset-0 overflow-hidden pointer-events-none">
                         <div className="absolute -top-[20%] -right-[10%] w-[70vw] h-[70vw] rounded-full bg-violet-900/20 blur-[120px]" />
@@ -810,8 +810,8 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                     </div>
 
                     {/* Left Side: Big Vinyl */}
-                    <div className="flex-1 flex flex-col items-center justify-center min-h-[40vh] md:min-h-screen relative z-10 pt-24 md:pt-0">
-                        <div className="relative w-64 h-64 md:w-[420px] md:h-[420px]">
+                    <div className="flex-shrink-0 flex flex-col items-center justify-center min-h-[25vh] md:min-h-screen relative z-10 pt-12 md:pt-0">
+                        <div className="relative w-48 h-48 sm:w-64 sm:h-64 md:w-[420px] md:h-[420px]">
 
                             {/* Album Sleeve (Behind) */}
                             {details.cover && (
@@ -845,16 +845,16 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                     </div>
 
                     {/* Right Side: Info & Controls */}
-                    <div className="flex-1 flex flex-col justify-center max-w-2xl px-6 pb-8 md:p-12 z-10 mx-auto md:mx-0 w-full mb-auto overflow-y-auto">
-                        <div className="mb-8 text-center md:text-left shrink-0">
-                            <div className="flex items-center justify-center md:justify-start gap-2 mb-3">
+                    <div className="flex-1 flex flex-col justify-start max-w-2xl px-6 pb-4 md:p-12 z-10 mx-auto md:mx-0 w-full min-h-0 overflow-hidden">
+                        <div className="mb-2 text-center md:text-left shrink-0">
+                            <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
                                 <Volume2 size={20} className={`flex-shrink-0 ${isPlaying ? 'text-violet-400 animate-pulse' : 'text-gray-500'}`} />
-                                <span className="text-sm font-bold uppercase tracking-[0.2em] text-violet-400">
+                                <span className="text-xs font-bold uppercase tracking-[0.2em] text-violet-400">
                                     Now Spinning
                                 </span>
                             </div>
                             <h2
-                                className="text-4xl md:text-6xl font-black text-white leading-tight mb-2 truncate cursor-pointer hover:text-violet-300 transition-colors title-wrap"
+                                className="text-2xl md:text-6xl font-black text-white leading-tight mb-0.5 truncate cursor-pointer hover:text-violet-300 transition-colors title-wrap"
                                 onClick={() => {
                                     setExpanded(false);
                                     if (onViewAlbum) onViewAlbum();
@@ -877,12 +877,12 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
 
                         {/* Side Tabs */}
                         {hasSides && (
-                            <div className="flex items-center md:justify-start justify-center gap-2 mb-6 shrink-0 flex-wrap">
+                            <div className="flex items-center md:justify-start justify-center gap-2 mb-4 shrink-0 flex-wrap">
                                 {sideKeys.map(side => (
                                     <button
                                         key={side}
                                         onClick={() => handleSideChange(side)}
-                                        className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all border ${selectedSide === side
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${selectedSide === side
                                             ? 'bg-violet-500/20 text-violet-300 border-violet-500/30 shadow-lg shadow-violet-500/10'
                                             : 'bg-white/5 text-gray-400 border-white/5 hover:text-white hover:bg-white/10'
                                             }`}
@@ -898,7 +898,7 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                         )}
 
                         {/* Tracklist & Lyrics Container */}
-                        <div className="rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md overflow-hidden flex flex-col min-h-[300px] flex-1 max-h-[440px]">
+                        <div className="rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0 max-h-[440px] md:max-h-none mb-4">
 
                             {/* Tab Headers */}
                             <div className="flex border-b border-white/10 shrink-0">
@@ -976,44 +976,44 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                                     </div>
                                 )}
                             </div>
+                        </div>
 
-                            {/* Player Controls Bar */}
-                            <div className="border-t border-white/10 p-4 shrink-0 bg-gray-950/30">
-                                <div className="flex items-center gap-5 relative z-10">
-                                    <button
-                                        onClick={handlePlay}
-                                        disabled={!selectedSide}
-                                        className={`flex items-center justify-center w-14 h-14 shrink-0 rounded-full transition-all ${isPlaying
-                                            ? 'bg-violet-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.4)] hover:scale-105 active:scale-95'
-                                            : 'bg-white/10 text-white hover:bg-white/20 border border-white/10 hover:scale-105 active:scale-95'
-                                            } disabled:opacity-30 disabled:hover:scale-100`}
-                                    >
-                                        {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
-                                    </button>
+                        {/* Player Controls Bar */}
+                        <div className="w-full border-t border-white/10 p-4 shrink-0 bg-gray-950/30 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-4 rounded-2xl md:rounded-b-2xl">
+                            <div className="flex items-center gap-5 relative z-10">
+                                <button
+                                    onClick={handlePlay}
+                                    disabled={!selectedSide}
+                                    className={`flex items-center justify-center w-14 h-14 shrink-0 rounded-full transition-all ${isPlaying
+                                        ? 'bg-violet-500 text-white shadow-[0_0_20px_rgba(139,92,246,0.4)] hover:scale-105 active:scale-95'
+                                        : 'bg-white/10 text-white hover:bg-white/20 border border-white/10 hover:scale-105 active:scale-95'
+                                        } disabled:opacity-30 disabled:hover:scale-100`}
+                                >
+                                    {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
+                                </button>
 
-                                    <div className="flex-1 min-w-0">
-                                        {currentTrackInfo ? (
-                                            <div className="flex justify-between items-end mb-2">
-                                                <p className="text-sm font-bold text-white truncate pr-2">
-                                                    {currentTrackInfo.done ? 'Side complete' : currentTrackInfo.track?.title || 'Unknown Track'}
-                                                </p>
-                                                <p className="text-xs font-medium text-gray-400 tabular-nums shrink-0">
-                                                    {formatTime(elapsed)} {sideDuration > 0 ? `/ ${formatTime(sideDuration)}` : ''}
-                                                </p>
-                                            </div>
-                                        ) : (
-                                            <div className="mb-2">
-                                                <p className="text-sm font-bold text-gray-500">No track playing</p>
-                                            </div>
-                                        )}
-
-                                        {/* Overall progress bar */}
-                                        <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
-                                            <div
-                                                className="h-full bg-gradient-to-r from-violet-500 to-pink-500 rounded-full transition-all duration-200 ease-out"
-                                                style={{ width: `${Math.min((elapsed / (sideDuration || 1)) * 100, 100)}%` }}
-                                            />
+                                <div className="flex-1 min-w-0">
+                                    {currentTrackInfo ? (
+                                        <div className="flex justify-between items-end mb-2">
+                                            <p className="text-sm font-bold text-white truncate pr-2">
+                                                {currentTrackInfo.done ? 'Side complete' : currentTrackInfo.track?.title || 'Unknown Track'}
+                                            </p>
+                                            <p className="text-xs font-medium text-gray-400 tabular-nums shrink-0">
+                                                {formatTime(elapsed)} {sideDuration > 0 ? `/ ${formatTime(sideDuration)}` : ''}
+                                            </p>
                                         </div>
+                                    ) : (
+                                        <div className="mb-2">
+                                            <p className="text-sm font-bold text-gray-500">No track playing</p>
+                                        </div>
+                                    )}
+
+                                    {/* Overall progress bar */}
+                                    <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-violet-500 to-pink-500 rounded-full transition-all duration-200 ease-out"
+                                            style={{ width: `${Math.min((elapsed / (sideDuration || 1)) * 100, 100)}%` }}
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -1036,7 +1036,7 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                             <X size={16} className="text-gray-400 hover:text-white" />
                         </button>
 
-                        <div className="flex items-center gap-3 p-3 lg:pr-12">
+                        <div className="flex items-center gap-3 p-3 lg:pr-12 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
                             {/* Spinning Vinyl */}
                             <div className="relative flex-shrink-0 w-12 h-12">
                                 <div className={`absolute inset-0 rounded-full bg-gradient-to-br from-gray-800 via-gray-900 to-black shadow-lg ${isPlaying ? 'vinyl-spin' : ''}`}>
