@@ -1339,20 +1339,20 @@ export const SpinVinyl = () => {
             <div className="relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent_50%)]" />
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-16 pb-4 sm:pb-12">
+                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-4 sm:pb-12">
                     {/* Header Row — Stacked on mobile, side-by-side on tablet+ */}
                     <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
-                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4 text-center sm:text-left">
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-violet-600 via-violet-500 to-pink-500 flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-2xl border border-white/20 group/logo">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-4 text-center sm:text-left">
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br from-violet-600 via-violet-500 to-pink-500 flex items-center justify-center flex-shrink-0 relative overflow-hidden shadow-2xl border border-white/20 group/logo">
                                 <div className="absolute inset-0 bg-[conic-gradient(from_0deg,transparent,rgba(255,255,255,0.1),transparent)] animate-spin-slow" style={{ animationDuration: '8s' }} />
-                                <Disc3 size={24} className="text-white sm:hidden relative z-10" />
+                                <Disc3 size={28} className="text-white sm:hidden relative z-10" />
                                 <Disc3 size={32} className="text-white hidden sm:block md:hidden relative z-10" />
                                 <Disc3 size={40} className="text-white hidden md:block relative z-10" />
                                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent pointer-events-none" />
                             </div>
-                            <div className="flex flex-col items-center sm:items-start max-w-[280px] sm:max-w-none">
-                                <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent leading-tight sm:leading-none">Spin Vinyl</h1>
-                                <p className="text-[10px] sm:text-sm text-violet-300/60 font-medium tracking-widest uppercase mt-1 sm:mt-1 leading-relaxed">The Ultimate Discogs® Listening Companion</p>
+                            <div className="flex flex-col items-center sm:items-start max-w-[300px] sm:max-w-none">
+                                <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent leading-tight sm:leading-none">Spin Vinyl</h1>
+                                <p className="text-xs sm:text-sm text-violet-200 font-bold tracking-widest uppercase mt-2 sm:mt-1 leading-relaxed shadow-sm">The Ultimate Discogs® Listening Companion</p>
                             </div>
                         </div>
 
