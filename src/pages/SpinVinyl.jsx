@@ -1036,7 +1036,7 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                             <X size={16} className="text-gray-400 hover:text-white" />
                         </button>
 
-                        <div className="flex items-center gap-3 p-3 lg:pr-12 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
+                        <div className="flex items-center gap-3 p-3 pr-12 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
                             {/* Spinning Vinyl */}
                             <div className="relative flex-shrink-0 w-12 h-12">
                                 <div className={`absolute inset-0 rounded-full bg-gradient-to-br from-gray-800 via-gray-900 to-black shadow-lg ${isPlaying ? 'vinyl-spin' : ''}`}>
