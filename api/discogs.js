@@ -239,6 +239,36 @@ export default async function handler(req, res) {
             if (!releaseId) return res.status(400).json({ error: 'Missing artist id' });
             apiUrl = `${DISCOGS_BASE}/artists/${releaseId}`;
             break;
+        // ─── Full collection paginator ─────────────────────────────────
+        case 'collectionAll': {
+            // Fetches ALL pages of the user's collection and returns a flat array.
+            // This is used for cross-referencing against external data sources.
+            const PER = 100; // max allowed by Discogs
+            let currentPage = 1;
+            let totalPages = 1;
+            const allReleases = [];
+
+            try {
+                do {
+                    const collUrl = `${DISCOGS_BASE}/users/${username}/collection/folders/0/releases?page=${currentPage}&per_page=${PER}&sort=artist&sort_order=asc`;
+                    const collReq = { url: collUrl, method: 'GET' };
+                    const collHeader = oauth.toHeader(oauth.authorize(collReq, userToken));
+                    const collRes = await fetch(collUrl, {
+                        headers: { ...collHeader, 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+                    });
+                    if (!collRes.ok) break;
+                    const collData = await collRes.json();
+                    allReleases.push(...(collData.releases || []));
+                    totalPages = collData.pagination?.pages || 1;
+                    currentPage++;
+                } while (currentPage <= totalPages);
+
+                return res.status(200).json({ releases: allReleases, total: allReleases.length });
+            } catch (collErr) {
+                console.error('[collectionAll] Error:', collErr);
+                return res.status(500).json({ error: 'Failed to fetch full collection.' });
+            }
+        }
         // ─── New Releases Tab actions ──────────────────────────────────
         case 'artistReleases': {
             // Full discography for an artist — used for gap analysis

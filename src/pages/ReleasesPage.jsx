@@ -83,67 +83,170 @@ const CardSkeleton = () => (
     </div>
 );
 
-// ─── New Releases Section ─────────────────────────────────────────
+// ─── Upcoming Vinyl Section ───────────────────────────────────────
+// Fetches from upcomingvinyl.com/featured via /api/upcoming and
+// cross-references against the user's FULL Discogs collection.
 
-const NewReleasesSection = ({ collectionArtists }) => {
-    const [releases, setReleases] = useState([]);
+// Normalize an artist name for fuzzy matching:
+// lowercase, strip "(2)" suffixes, punctuation, and extra whitespace.
+const normalizeArtist = (name) =>
+    (name || '')
+        .toLowerCase()
+        .replace(/\s*\(\d+\)\s*$/, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+// Try to identify whether a release entry mentions any of the user's artists.
+// upcomingvinyl.com rows are "Artist Name Album Title" — we don't have a clean separator,
+// but we can check if any known artist name appears at the START of the raw string.
+const matchesArtist = (raw, normalizedArtistSet) => {
+    const normalizedRaw = normalizeArtist(raw);
+    for (const artist of normalizedArtistSet) {
+        if (artist.length < 2) continue;
+        // The entry typically starts with the artist name
+        if (normalizedRaw.startsWith(artist + ' ') || normalizedRaw === artist) {
+            return artist;
+        }
+    }
+    return null;
+};
+
+const UpcomingReleasesSection = () => {
+    const [upcoming, setUpcoming] = useState([]);        // all releases from upcomingvinyl
+    const [artistSet, setArtistSet] = useState(null);    // normalized artist name Set from full collection
     const [loading, setLoading] = useState(false);
+    const [loadingCollection, setLoadingCollection] = useState(false);
     const [error, setError] = useState(null);
+    const [showAll, setShowAll] = useState(false);
 
-    const fetchReleases = useCallback(async (force = false) => {
+    // Load both the upcoming releases and the full collection in parallel
+    const fetchData = useCallback(async (force = false) => {
         if (!force) {
             const cached = readCache(CACHE_KEYS.releases);
-            if (cached) { setReleases(cached); return; }
-        }
-        if (!collectionArtists.length) return;
-        setLoading(true);
-        setError(null);
-        clearCache(CACHE_KEYS.releases);
-        try {
-            const topArtists = collectionArtists.slice(0, 8);
-            const results = [];
-            for (const artist of topArtists) {
-                try {
-                    const res = await fetch(`/api/discogs?action=newReleases&artist=${encodeURIComponent(artist.name)}`);
-                    const data = await res.json();
-                    if (data.results?.length) {
-                        results.push(...data.results.map(r => ({ ...r, _artist: artist.name, _priority: artist.count })));
-                    }
-                } catch { /* skip this artist */ }
+            if (cached?.upcoming && cached?.artistSet) {
+                setUpcoming(cached.upcoming);
+                setArtistSet(new Set(cached.artistSet));
+                return;
             }
-            // Deduplicate by id, sort by year desc then artist priority
-            const seen = new Set();
-            const deduped = results
-                .filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; })
-                .sort((a, b) => (b.year || 0) - (a.year || 0) || b._priority - a._priority)
-                .slice(0, 40);
-            setReleases(deduped);
-            writeCache(CACHE_KEYS.releases, deduped);
+        }
+        clearCache(CACHE_KEYS.releases);
+        setLoading(true);
+        setLoadingCollection(true);
+        setError(null);
+
+        try {
+            // Fetch upcoming releases and FULL collection in parallel
+            const [upcomingRes, collectionRes] = await Promise.all([
+                fetch('/api/upcoming'),
+                fetch('/api/discogs?action=collectionAll'),
+            ]);
+
+            // --- Upcoming releases ---
+            const upcomingData = upcomingRes.ok ? await upcomingRes.json() : { releases: [] };
+            setUpcoming(upcomingData.releases || []);
+
+            // --- Full collection artist set ---
+            setLoadingCollection(false);
+            const collectionData = collectionRes.ok ? await collectionRes.json() : { releases: [] };
+            const allReleases = collectionData.releases || [];
+
+            const names = new Set();
+            allReleases.forEach(r => {
+                const info = r.basic_information || {};
+                (info.artists || []).forEach(a => {
+                    if (a.name) names.add(normalizeArtist(a.name));
+                });
+            });
+            setArtistSet(names);
+
+            // Cache the results
+            writeCache(CACHE_KEYS.releases, {
+                upcoming: upcomingData.releases || [],
+                artistSet: [...names],
+            });
         } catch (e) {
-            setError('Failed to load releases. Try refreshing.');
+            setError('Failed to load upcoming releases. Try refreshing.');
+            console.error('[UpcomingReleases]', e);
         } finally {
             setLoading(false);
+            setLoadingCollection(false);
         }
-    }, [collectionArtists]);
+    }, []);
 
-    useEffect(() => { if (collectionArtists.length) fetchReleases(); }, [fetchReleases]);
+    useEffect(() => { fetchData(); }, [fetchData]);
 
-    const parseTitle = (combined) => {
-        // Discogs search titles come as "Artist - Title"
-        const idx = combined.indexOf(' - ');
-        if (idx === -1) return { artist: '', title: combined };
-        return { artist: combined.slice(0, idx), title: combined.slice(idx + 3) };
+    // Partition into "For You" matches and everything else
+    const { forYou, others } = useMemo(() => {
+        if (!artistSet) return { forYou: [], others: upcoming };
+        const forYou = [];
+        const others = [];
+        upcoming.forEach(r => {
+            const match = matchesArtist(r.raw, artistSet);
+            if (match) forYou.push({ ...r, _matchedArtist: match });
+            else others.push(r);
+        });
+        return { forYou, others };
+    }, [upcoming, artistSet]);
+
+    const visibleOthers = showAll ? others : others.slice(0, 30);
+
+    // Group releases by date for display
+    const groupByDate = (items) => {
+        const groups = {};
+        items.forEach(r => {
+            const key = r.releaseDate || 'TBD';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(r);
+        });
+        return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+    };
+
+    const formatDate = (isoDate) => {
+        try {
+            return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', {
+                weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+            });
+        } catch { return isoDate; }
+    };
+
+    const ReleaseRow = ({ release, isForYou }) => {
+        const searchUrl = `https://www.discogs.com/search/?q=${encodeURIComponent(release.title || release.raw)}&type=release&format=Vinyl`;
+        return (
+            <a
+                href={searchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group"
+            >
+                <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-white truncate leading-snug group-hover:text-violet-300 transition-colors">
+                        {release.raw}
+                    </p>
+                </div>
+                {isForYou && (
+                    <span className="flex-shrink-0 text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded-full">
+                        FOR YOU
+                    </span>
+                )}
+                <ExternalLink size={11} className="flex-shrink-0 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </a>
+        );
     };
 
     return (
         <div>
-            <div className="flex items-center justify-between mb-4">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
                 <div>
-                    <h2 className="text-base font-bold text-white">Latest Vinyl Releases</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Recent vinyl from artists in your collection</p>
+                    <h2 className="text-base font-bold text-white">Upcoming Vinyl Releases</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        From upcomingvinyl.com · personalized to your collection
+                        {loadingCollection && <span className="ml-2 text-violet-400">Loading your collection…</span>}
+                    </p>
                 </div>
                 <button
-                    onClick={() => fetchReleases(true)}
+                    onClick={() => fetchData(true)}
                     disabled={loading}
                     className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
                     title="Refresh"
@@ -152,12 +255,16 @@ const NewReleasesSection = ({ collectionArtists }) => {
                 </button>
             </div>
 
+            {/* Loading skeleton */}
             {loading && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {Array.from({ length: 8 }).map((_, i) => <CardSkeleton key={i} />)}
+                <div className="space-y-2 animate-pulse">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="h-9 bg-white/[0.04] rounded-xl" />
+                    ))}
                 </div>
             )}
 
+            {/* Error */}
             {error && (
                 <div className="text-center py-10 text-rose-400 text-sm flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
@@ -165,54 +272,58 @@ const NewReleasesSection = ({ collectionArtists }) => {
                 </div>
             )}
 
-            {!loading && !error && releases.length === 0 && (
+            {/* Empty state */}
+            {!loading && !error && upcoming.length === 0 && (
                 <div className="text-center py-12 text-gray-500 text-sm">
                     <Disc3 size={36} className="mx-auto mb-3 opacity-20" />
-                    <p>No releases found yet. Make sure your collection is loaded.</p>
+                    <p>No upcoming releases found.</p>
                 </div>
             )}
 
-            {!loading && releases.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {releases.map(r => {
-                        const { artist, title } = parseTitle(r.title || '');
-                        const img = r.cover_image || r.thumb;
-                        const label = r.label?.[0] || '';
-                        const format = r.format?.join(', ') || 'Vinyl';
-                        return (
-                            <a
-                                key={r.id}
-                                href={`https://www.discogs.com${r.uri || ''}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="group rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10"
-                            >
-                                <div className="aspect-square bg-gray-800 relative overflow-hidden">
-                                    {img ? (
-                                        <img src={img} alt={title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <Disc3 size={32} className="text-gray-600" />
-                                        </div>
-                                    )}
-                                    {r.year && (
-                                        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-                                            {r.year}
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="p-3">
-                                    <p className="text-xs font-bold text-white truncate leading-tight">{title || r.title}</p>
-                                    <p className="text-[11px] text-gray-400 truncate mt-0.5">{artist || r._artist}</p>
-                                    {label && <p className="text-[10px] text-gray-600 truncate mt-0.5">{label}</p>}
-                                    <div className="mt-1.5 flex items-center gap-1">
-                                        <span className="text-[9px] bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded px-1.5 py-0.5 font-medium">{format}</span>
-                                        <ExternalLink size={10} className="text-gray-600 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
-                                </div>
-                            </a>
-                        );
-                    })}
+            {/* For You — only shown when we have artist matches */}
+            {!loading && forYou.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <span>★</span> For You ({forYou.length})
+                    </h3>
+                    <div className="space-y-0.5 rounded-2xl bg-violet-500/5 border border-violet-500/15 overflow-hidden p-1">
+                        {forYou.map((r, i) => (
+                            <ReleaseRow key={`foryou-${r.raw}-${i}`} release={r} isForYou />
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* All upcoming grouped by date */}
+            {!loading && others.length > 0 && (
+                <div>
+                    {forYou.length > 0 && (
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                            All Upcoming
+                        </h3>
+                    )}
+                    {groupByDate(visibleOthers).map(([date, items]) => (
+                        <div key={date} className="mb-4">
+                            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 px-1">
+                                {formatDate(date)}
+                            </p>
+                            <div className="space-y-0.5 rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden p-1">
+                                {items.map((r, i) => (
+                                    <ReleaseRow key={`other-${r.raw}-${i}`} release={r} />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    {others.length > 30 && (
+                        <button
+                            onClick={() => setShowAll(s => !s)}
+                            className="w-full mt-2 py-2 text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 transition-colors"
+                        >
+                            {showAll
+                                ? <><ChevronUp size={14} /> Show Less</>
+                                : <><ChevronDown size={14} /> Show {others.length - 30} More</>}
+                        </button>
+                    )}
                 </div>
             )}
         </div>
@@ -927,7 +1038,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
-    { id: 'newReleases', label: 'New Releases', icon: Disc3 },
+    { id: 'newReleases', label: 'Upcoming Releases', icon: Disc3 },
     { id: 'vinylNews', label: 'Vinyl News', icon: Newspaper },
     { id: 'completeCollection', label: 'Complete Collection', icon: Heart },
     { id: 'wantlist', label: 'Wantlist', icon: Bookmark },
@@ -1028,7 +1139,7 @@ const ReleasesPage = ({ releases = [] }) => {
             {/* Content */}
             <div className="max-w-3xl mx-auto px-4 pt-5">
                 {activeTab === 'newReleases' && (
-                    <NewReleasesSection collectionArtists={collectionArtists} />
+                    <UpcomingReleasesSection />
                 )}
                 {activeTab === 'vinylNews' && (
                     <VinylNewsSection ownedArtistNames={ownedArtistNames} ownedGenres={ownedGenres} />

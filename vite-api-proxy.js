@@ -2,6 +2,7 @@
 import discogsHandler from './api/discogs.js';
 import lyricsHandler from './api/lyrics.js';
 import releasesHandler from './api/releases.js';
+import upcomingHandler from './api/upcoming.js';
 
 // Helper to mock Vercel/Express 'res' object for Serverless Functions
 const mockResponse = (resolve, res) => {
@@ -146,6 +147,28 @@ export const apiMiddleware = () => ({
                         req.query = {};
                         try {
                             await releasesHandler(req, mockedRes);
+                        } catch (handlerErr) {
+                            reject(handlerErr);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/upcoming (upcomingvinyl.com scraper) ---
+            if (url === '/upcoming') {
+                try {
+                    await new Promise(async (resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        try {
+                            await upcomingHandler(req, mockedRes);
                         } catch (handlerErr) {
                             reject(handlerErr);
                         }
