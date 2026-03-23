@@ -27,22 +27,19 @@ const writeCache = (key, data) => {
 const clearCache = (key) => { try { localStorage.removeItem(key); } catch { } };
 
 // ─── Upcoming wantlist persistence ────────────────────────────────
-// Stores a set of `raw` keys for upcoming releases the user has added to their
-// Discogs wantlist, so the heart icon persists across page reloads.
+// Stores saved upcoming releases locally (keyed by `raw`). No Discogs lookup —
+// data comes entirely from upcomingvinyl.com so there are no wrong-version issues.
 
 const UPCOMING_WANTLIST_LS_KEY = 'spinvinyl_upcoming_wantlist';
 
-const loadAddedUpcomingRaws = () => {
-    try { return new Set(JSON.parse(localStorage.getItem(UPCOMING_WANTLIST_LS_KEY) || '[]')); }
-    catch { return new Set(); }
+const loadUpcomingWantlist = () => {
+    try { return JSON.parse(localStorage.getItem(UPCOMING_WANTLIST_LS_KEY) || '{}'); }
+    catch { return {}; }
 };
 
-const saveAddedUpcomingRaw = (raw) => {
-    try {
-        const s = loadAddedUpcomingRaws();
-        s.add(raw);
-        localStorage.setItem(UPCOMING_WANTLIST_LS_KEY, JSON.stringify([...s]));
-    } catch { }
+const saveUpcomingWantlist = (map) => {
+    try { localStorage.setItem(UPCOMING_WANTLIST_LS_KEY, JSON.stringify(map)); }
+    catch { }
 };
 
 // ─── Shared helpers ───────────────────────────────────────────────
@@ -323,42 +320,30 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const [selectedRelease, setSelectedRelease] = useState(null);
     const [viewMode, setViewMode] = useState('grid');
     const [wantlistState, setWantlistState] = useState(() => {
-        // Seed from localStorage so hearts persist across page reloads
+        const map = loadUpcomingWantlist();
         const state = {};
-        loadAddedUpcomingRaws().forEach(raw => { state[raw] = 'done'; });
+        Object.keys(map).forEach(raw => { state[raw] = 'done'; });
         return state;
     });
     const [toastMsg, setToastMsg] = useState(null);
     const enrichAttempted = useRef(false);
 
-    const addToWantlist = useCallback(async (e, release) => {
+    const addToWantlist = useCallback((e, release) => {
         e.stopPropagation();
         const key = release.raw;
-        setWantlistState(prev => {
-            if (prev[key] === 'pending' || prev[key] === 'done') return prev;
-            return { ...prev, [key]: 'pending' };
-        });
-        // Read current state without depending on it as a closure variable
-        try {
-            const q = encodeURIComponent(`${release.artist || ''} ${release.title || release.raw}`.trim());
-            const searchRes = await fetch(`/api/discogs?action=searchRelease&q=${q}`);
-            if (!searchRes.ok) throw new Error('Search failed');
-            const searchData = await searchRes.json();
-            const top = searchData.results?.[0];
-            if (!top?.id) throw new Error('Not found on Discogs');
-            const wantRes = await fetch(`/api/discogs?action=addToWantlist&id=${top.id}`, { method: 'POST' });
-            if (!wantRes.ok && wantRes.status !== 201) throw new Error('Add failed');
+        const current = loadUpcomingWantlist();
+        if (current[key]) {
+            delete current[key];
+            saveUpcomingWantlist(current);
+            setWantlistState(prev => { const n = { ...prev }; delete n[key]; return n; });
+            setToastMsg('Removed from saved releases.');
+        } else {
+            current[key] = release;
+            saveUpcomingWantlist(current);
             setWantlistState(prev => ({ ...prev, [key]: 'done' }));
-            saveAddedUpcomingRaw(key);           // persist across reloads
-            clearCache(CACHE_KEYS.wantlist);     // force wantlist tab to re-fetch
-            setToastMsg(`♡ Added "${release.title || release.raw}" to your Wantlist!`);
-            setTimeout(() => setToastMsg(null), 3500);
-        } catch {
-            setWantlistState(prev => ({ ...prev, [key]: 'error' }));
-            setToastMsg('Could not find this release on Discogs.');
-            setTimeout(() => setToastMsg(null), 3500);
-            setTimeout(() => setWantlistState(prev => { const n = { ...prev }; delete n[key]; return n; }), 4000);
+            setToastMsg(`♡ Saved "${release.title || release.raw}"!`);
         }
+        setTimeout(() => setToastMsg(null), 2500);
     }, []);
 
     // ── Build artist/genre profile from the parent's full collection ──
@@ -925,6 +910,14 @@ const WantlistSection = () => {
     const [removeState, setRemoveState] = useState({}); // { id: 'pending'|'error' }
     const [selectedRelease, setSelectedRelease] = useState(null);
     const [viewMode, setViewMode] = useState('grid');
+    const [savedUpcoming, setSavedUpcoming] = useState(() => Object.values(loadUpcomingWantlist()));
+
+    const removeSavedUpcoming = (raw) => {
+        const current = loadUpcomingWantlist();
+        delete current[raw];
+        saveUpcomingWantlist(current);
+        setSavedUpcoming(Object.values(current));
+    };
 
     const fetchWantlist = useCallback(async (force = false) => {
         if (!force) {
@@ -972,13 +965,62 @@ const WantlistSection = () => {
     return (
         <div>
             {selectedRelease && (
-                <MissingRecordModal 
-                    releaseInfo={selectedRelease} 
+                <MissingRecordModal
+                    releaseInfo={selectedRelease}
                     onClose={() => setSelectedRelease(null)}
-                    // Mock the wantlist additions because it's already in the wantlist
                     wantlistState={{ [String(selectedRelease.release.id)]: 'done' }}
                     addToWantlist={() => {}}
                 />
+            )}
+
+            {/* Saved Upcoming Releases */}
+            {savedUpcoming.length > 0 && (
+                <div className="mb-6">
+                    <h2 className="text-base font-bold text-white mb-1">Saved Upcoming Releases</h2>
+                    <p className="text-xs text-gray-500 mb-3">Releases you've saved from upcomingvinyl.com</p>
+                    <div className="space-y-1">
+                        {savedUpcoming.map(r => (
+                            <div key={r.raw} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all">
+                                <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
+                                    {r.thumb ? (
+                                        <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <Disc3 size={16} className="text-gray-600" />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-white truncate">{r.artist}</p>
+                                    <p className="text-[11px] text-gray-400 truncate">{r.title}</p>
+                                </div>
+                                {r.releaseDate && (
+                                    <span className="text-[10px] text-violet-400 font-semibold flex-shrink-0">{r.releaseDate}</span>
+                                )}
+                                {r.sourceUrl && (
+                                    <a
+                                        href={r.sourceUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={e => e.stopPropagation()}
+                                        className="flex-shrink-0 text-gray-600 hover:text-violet-400 transition-colors opacity-0 group-hover:opacity-100"
+                                        title="View on Upcoming Vinyl"
+                                    >
+                                        <ExternalLink size={13} />
+                                    </a>
+                                )}
+                                <button
+                                    onClick={() => removeSavedUpcoming(r.raw)}
+                                    className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"
+                                    title="Remove"
+                                >
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-4 border-t border-white/5" />
+                </div>
             )}
 
             <div className="flex items-center justify-between mb-4">
