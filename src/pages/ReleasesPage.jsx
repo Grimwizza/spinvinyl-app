@@ -599,7 +599,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 <div>
                     <h2 className="text-base font-bold text-white">Upcoming Vinyl Releases</h2>
                     <p className="text-xs text-gray-500 mt-0.5">
-                        From upcomingvinyl.com · personalized to your collection
+                        From upcomingvinyl.com · personalized artists & genres from your collection
                         {collectionLoading && <span className="ml-2 text-violet-400">Loading your collection…</span>}
                     </p>
                 </div>
@@ -911,6 +911,7 @@ const WantlistSection = () => {
     const [selectedRelease, setSelectedRelease] = useState(null);
     const [viewMode, setViewMode] = useState(() => localStorage.getItem('sv_wantlist_view') || 'grid');
     const [savedUpcoming, setSavedUpcoming] = useState(() => Object.values(loadUpcomingWantlist()));
+    const [selectedUpcoming, setSelectedUpcoming] = useState(null);
 
     const changeViewMode = (mode) => {
         setViewMode(mode);
@@ -969,6 +970,14 @@ const WantlistSection = () => {
 
     return (
         <div>
+            {selectedUpcoming && (
+                <UpcomingReleaseModal
+                    release={selectedUpcoming}
+                    onClose={() => setSelectedUpcoming(null)}
+                    addToWantlist={null}
+                    wantlistState={null}
+                />
+            )}
             {selectedRelease && (
                 <MissingRecordModal
                     releaseInfo={selectedRelease}
@@ -1016,7 +1025,7 @@ const WantlistSection = () => {
                     {viewMode === 'grid' ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {savedUpcoming.map(r => (
-                                <div key={r.raw} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10">
+                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer">
                                     <div className="aspect-square bg-gray-800 relative overflow-hidden">
                                         {r.thumb ? (
                                             <img src={r.thumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
@@ -1044,7 +1053,7 @@ const WantlistSection = () => {
                     ) : (
                         <div className="space-y-1">
                             {savedUpcoming.map(r => (
-                                <div key={r.raw} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all">
+                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer">
                                     <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
                                         {r.thumb ? (
                                             <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
@@ -1109,7 +1118,7 @@ const WantlistSection = () => {
                             <div
                                 key={item.id}
                                 className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer text-left"
-                                onClick={() => setSelectedRelease({ release: { ...info, id: item.id, label, type: 'release' }, artistName })}
+                                onClick={() => setSelectedRelease({ release: { ...info, label, type: 'release' }, artistName })}
                             >
                                 <div className="aspect-square bg-gray-800 relative overflow-hidden">
                                     {img ? (
@@ -1156,7 +1165,7 @@ const WantlistSection = () => {
                             <div
                                 key={item.id}
                                 className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
-                                onClick={() => setSelectedRelease({ release: { ...info, id: item.id, label, type: 'release' }, artistName })}
+                                onClick={() => setSelectedRelease({ release: { ...info, label, type: 'release' }, artistName })}
                             >
                                 <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
                                     {img ? (
@@ -1197,27 +1206,49 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
     const { release, artistName } = releaseInfo;
     const [bio, setBio] = useState(null);
     const [loadingBio, setLoadingBio] = useState(true);
+    const [tracklist, setTracklist] = useState([]);
+    const [releaseDetail, setReleaseDetail] = useState(null);
 
     const releaseId = String(release.main_release || release.id);
-    const wState = wantlistState[releaseId];
+    const wState = wantlistState?.[releaseId];
 
-    // Discogs typically uses /master/{id} or /release/{id}
     const discogsQuery = release.type === 'master' ? `/master/${releaseId}` : `/release/${releaseId}`;
     const discogsUrl = `https://www.discogs.com${release.uri || discogsQuery}`;
     const amazonUrl = `https://www.amazon.com/s?k=${encodeURIComponent(`${artistName} ${release.title} vinyl`)}`;
-    
+
     useEffect(() => {
-        // Fetch brief artist context from Wikipedia
+        let cancelled = false;
+        setBio(null);
         setLoadingBio(true);
-        const wikiName = artistName.replace(/ /g, '_');
-        fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiName)}`)
-            .then(res => res.json())
+        setTracklist([]);
+        setReleaseDetail(null);
+
+        // Fetch full release details from Discogs (tracklist, genres, etc.)
+        fetch(`/api/discogs?action=release&id=${releaseId}`)
+            .then(r => r.ok ? r.json() : null)
             .then(data => {
-                if (data.extract) setBio({ text: data.extract, url: data.content_urls?.desktop?.page });
+                if (cancelled || !data) return;
+                setTracklist(data.tracklist || []);
+                setReleaseDetail(data);
             })
-            .catch(() => {})
-            .finally(() => setLoadingBio(false));
-    }, [artistName]);
+            .catch(() => {});
+
+        // Fetch artist bio from Wikipedia
+        const wikiName = (artistName || '').replace(/ /g, '_');
+        if (wikiName) {
+            fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiName)}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!cancelled && data.extract) setBio({ text: data.extract, url: data.content_urls?.desktop?.page });
+                })
+                .catch(() => {})
+                .finally(() => { if (!cancelled) setLoadingBio(false); });
+        } else {
+            setLoadingBio(false);
+        }
+
+        return () => { cancelled = true; };
+    }, [releaseId, artistName]);
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
@@ -1274,6 +1305,31 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                             <p className="text-sm text-gray-500 italic">No biography available.</p>
                         )}
                     </div>
+
+                    {/* Tracklist */}
+                    {tracklist.length > 0 && (
+                        <div className="mt-8">
+                            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Tracklist</h3>
+                            <ol className="space-y-1">
+                                {tracklist.map((track, i) => (
+                                    <li key={i} className="flex items-center gap-2 text-sm text-gray-400">
+                                        <span className="text-gray-600 w-6 flex-shrink-0 text-right text-xs">{track.position || i + 1}</span>
+                                        <span className="flex-1 truncate">{track.title}</span>
+                                        {track.duration && <span className="text-xs text-gray-600 flex-shrink-0">{track.duration}</span>}
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    )}
+
+                    {/* Genres / Styles */}
+                    {(releaseDetail?.genres?.length > 0 || releaseDetail?.styles?.length > 0) && (
+                        <div className="mt-6 flex flex-wrap gap-1.5">
+                            {[...(releaseDetail.genres || []), ...(releaseDetail.styles || [])].map(g => (
+                                <span key={g} className="text-[10px] text-gray-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">{g}</span>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Purchase Actions */}
                     <div className="mt-8 space-y-3">
@@ -1690,11 +1746,11 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
                             <Compass size={24} className="text-white" />
                         </div>
                         <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-                            Explore
+                            Explore Vinyl
                         </h1>
                     </div>
                     <p className="text-gray-500 text-sm">
-                        Personalized for your {collectionArtists.length} artists
+                        Personalized experience, curated from your collection
                     </p>
                 </div>
             </div>
