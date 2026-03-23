@@ -909,8 +909,13 @@ const WantlistSection = () => {
     const [error, setError] = useState(null);
     const [removeState, setRemoveState] = useState({}); // { id: 'pending'|'error' }
     const [selectedRelease, setSelectedRelease] = useState(null);
-    const [viewMode, setViewMode] = useState('grid');
+    const [viewMode, setViewMode] = useState(() => localStorage.getItem('sv_wantlist_view') || 'grid');
     const [savedUpcoming, setSavedUpcoming] = useState(() => Object.values(loadUpcomingWantlist()));
+
+    const changeViewMode = (mode) => {
+        setViewMode(mode);
+        localStorage.setItem('sv_wantlist_view', mode);
+    };
 
     const removeSavedUpcoming = (raw) => {
         const current = loadUpcomingWantlist();
@@ -973,56 +978,6 @@ const WantlistSection = () => {
                 />
             )}
 
-            {/* Saved Upcoming Releases */}
-            {savedUpcoming.length > 0 && (
-                <div className="mb-6">
-                    <h2 className="text-base font-bold text-white mb-1">Saved Upcoming Releases</h2>
-                    <p className="text-xs text-gray-500 mb-3">Releases you've saved from upcomingvinyl.com</p>
-                    <div className="space-y-1">
-                        {savedUpcoming.map(r => (
-                            <div key={r.raw} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all">
-                                <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
-                                    {r.thumb ? (
-                                        <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <Disc3 size={16} className="text-gray-600" />
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-white truncate">{r.artist}</p>
-                                    <p className="text-[11px] text-gray-400 truncate">{r.title}</p>
-                                </div>
-                                {r.releaseDate && (
-                                    <span className="text-[10px] text-violet-400 font-semibold flex-shrink-0">{r.releaseDate}</span>
-                                )}
-                                {r.sourceUrl && (
-                                    <a
-                                        href={r.sourceUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={e => e.stopPropagation()}
-                                        className="flex-shrink-0 text-gray-600 hover:text-violet-400 transition-colors opacity-0 group-hover:opacity-100"
-                                        title="View on Upcoming Vinyl"
-                                    >
-                                        <ExternalLink size={13} />
-                                    </a>
-                                )}
-                                <button
-                                    onClick={() => removeSavedUpcoming(r.raw)}
-                                    className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"
-                                    title="Remove"
-                                >
-                                    <Trash2 size={12} />
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="mt-4 border-t border-white/5" />
-                </div>
-            )}
-
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Your Wantlist</h2>
@@ -1030,14 +985,14 @@ const WantlistSection = () => {
                 </div>
                 <div className="flex items-center gap-1.5">
                     <button
-                        onClick={() => setViewMode('list')}
+                        onClick={() => changeViewMode('list')}
                         className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
                         title="List view"
                     >
                         <LayoutList size={14} />
                     </button>
                     <button
-                        onClick={() => setViewMode('grid')}
+                        onClick={() => changeViewMode('grid')}
                         className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
                         title="Tile view"
                     >
@@ -1053,6 +1008,74 @@ const WantlistSection = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Saved Upcoming Releases */}
+            {savedUpcoming.length > 0 && (
+                <div className="mb-6">
+                    <p className="text-xs text-gray-500 mb-3">Saved from upcomingvinyl.com</p>
+                    {viewMode === 'grid' ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                            {savedUpcoming.map(r => (
+                                <div key={r.raw} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10">
+                                    <div className="aspect-square bg-gray-800 relative overflow-hidden">
+                                        {r.thumb ? (
+                                            <img src={r.thumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <Disc3 size={32} className="text-gray-600" />
+                                            </div>
+                                        )}
+                                        {r.releaseDate && (
+                                            <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm text-violet-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                                                {r.releaseDate}
+                                            </div>
+                                        )}
+                                        <button onClick={() => removeSavedUpcoming(r.raw)} className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-rose-500/80 backdrop-blur rounded-full flex items-center justify-center text-white border border-white/10 opacity-0 group-hover:opacity-100 transition-all shadow-xl" title="Remove">
+                                            <Trash2 size={12} />
+                                        </button>
+                                    </div>
+                                    <div className="p-3">
+                                        <p className="text-xs font-bold text-white truncate leading-tight group-hover:text-violet-300 transition-colors">{r.artist}</p>
+                                        <p className="text-[11px] text-gray-400 truncate mt-0.5">{r.title}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="space-y-1">
+                            {savedUpcoming.map(r => (
+                                <div key={r.raw} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all">
+                                    <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
+                                        {r.thumb ? (
+                                            <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <Disc3 size={16} className="text-gray-600" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-white truncate">{r.artist}</p>
+                                        <p className="text-[11px] text-gray-400 truncate">{r.title}</p>
+                                    </div>
+                                    {r.releaseDate && (
+                                        <span className="text-[10px] text-violet-400 font-semibold flex-shrink-0">{r.releaseDate}</span>
+                                    )}
+                                    {r.sourceUrl && (
+                                        <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-shrink-0 text-gray-600 hover:text-violet-400 transition-colors opacity-0 group-hover:opacity-100" title="View on Upcoming Vinyl">
+                                            <ExternalLink size={13} />
+                                        </a>
+                                    )}
+                                    <button onClick={() => removeSavedUpcoming(r.raw)} className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100" title="Remove">
+                                        <Trash2 size={12} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="mt-4 border-t border-white/5" />
+                </div>
+            )}
 
             {loading && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
