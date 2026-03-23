@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library } from 'lucide-react';
+import { checkAndAwardBadges } from '../lib/badgeEngine.js';
+import { getStoredStats } from '../lib/statsEngine.js';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -251,7 +253,14 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose, addToWantlist, w
                     {detail?.description && (
                         <div className="mt-8">
                             <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">About this Release</h3>
-                            <p className="text-sm text-gray-400 leading-relaxed line-clamp-5">{detail.description}</p>
+                            <div className="text-sm text-gray-400 leading-relaxed space-y-2">
+                                <p className="line-clamp-5">{detail.description}</p>
+                                {release.sourceUrl && (
+                                    <a href={release.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 font-medium inline-flex items-center gap-1">
+                                        Read more on Upcoming Vinyl <ExternalLink size={12} />
+                                    </a>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -272,16 +281,6 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose, addToWantlist, w
                     <div className="mt-8 space-y-3">
                         <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Links</h3>
                         <div className="grid grid-cols-2 gap-3 pb-8 sm:pb-0">
-                            {release.sourceUrl && (
-                                <a
-                                    href={release.sourceUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-violet-200 border border-violet-500/20 transition-colors text-sm font-semibold"
-                                >
-                                    <ExternalLink size={16} /> View on Upcoming Vinyl
-                                </a>
-                            )}
                             <a
                                 href={release.searchUrl}
                                 target="_blank"
@@ -1460,6 +1459,11 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
         setGaps(gapData);
         writeCache(CACHE_KEYS.gaps, gapData);
         setLoading(false);
+
+        // Check for newly earned badges (completionist badges read from gaps cache)
+        if (gapData.some(g => g.pct === 100)) {
+            checkAndAwardBadges(getStoredStats(), { total: collectionArtists.length });
+        }
     }, [collectionArtists, ownedMasterIds]);
 
     const prevCollectionLoadingRef = React.useRef(collectionLoading);
