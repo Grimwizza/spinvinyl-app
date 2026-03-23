@@ -115,6 +115,7 @@ export default async function handler(req, res) {
                         thumb,
                         releaseDate: currentDate,
                         dayOfWeek: currentDayOfWeek || '',
+                        sourceUrl: link,
                         searchUrl: `https://www.discogs.com/search/?q=${encodeURIComponent(artist + ' ' + cleanTitle)}&type=release&format=Vinyl`
                     });
                 }
