@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { BarChart2, Clock, Disc3, Music2, TrendingUp } from 'lucide-react';
+import { BarChart2, CheckCircle, Clock, Disc3, Music2, TrendingUp } from 'lucide-react';
 import {
     getPeriodTotalSeconds, getTopAlbums, getGenreBreakdown,
     getDayMap, getUniqueAlbumsSpun, getStoredStats, formatDuration, getCurrentStreak,
@@ -223,6 +223,46 @@ const CollectionProgress = ({ spunCount, totalCount }) => {
     );
 };
 
+// ─── Completed Collections ────────────────────────────────────────
+
+const getCompletedArtists = () => {
+    try {
+        const raw = localStorage.getItem('spinvinyl_gaps_cache');
+        if (!raw) return [];
+        const { data } = JSON.parse(raw);
+        return (data || []).filter(g => g.pct === 100).map(g => g.artist);
+    } catch { return []; }
+};
+
+const CompletedCollections = () => {
+    const artists = useMemo(() => getCompletedArtists(), []);
+    if (artists.length === 0) return null;
+
+    return (
+        <div className="rounded-2xl border border-green-500/20 bg-green-500/[0.04] p-4 sm:p-5">
+            <div className="flex items-center gap-2 mb-4">
+                <CheckCircle size={16} className="text-green-400 flex-shrink-0" />
+                <h3 className="text-sm font-bold text-white">Completed Artist Collections</h3>
+                <span className="ml-auto text-xs font-bold text-green-400">{artists.length}</span>
+            </div>
+            <div className="space-y-2">
+                {artists.map(artist => (
+                    <div key={artist.id} className="flex items-center gap-3">
+                        <div className="w-6 h-6 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center flex-shrink-0">
+                            <CheckCircle size={12} className="text-green-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{artist.name}</p>
+                            <p className="text-xs text-gray-500">{artist.count} record{artist.count !== 1 ? 's' : ''} owned</p>
+                        </div>
+                        <span className="text-xs font-bold text-green-400">100%</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // ─── Main Stats Page ──────────────────────────────────────────────
 
 const StatsPage = ({ collectionCount }) => {
@@ -286,6 +326,9 @@ const StatsPage = ({ collectionCount }) => {
 
                 {/* Collection Progress */}
                 <CollectionProgress spunCount={spunCount} totalCount={collectionCount || 0} />
+
+                {/* Completed Artist Collections */}
+                <CompletedCollections />
 
                 {/* Empty state */}
                 {!hasAnyData && (

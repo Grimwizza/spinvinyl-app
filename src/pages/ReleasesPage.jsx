@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library } from 'lucide-react';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -25,6 +25,25 @@ const writeCache = (key, data) => {
     try { localStorage.setItem(key, JSON.stringify({ data, fetchedAt: new Date().toISOString() })); } catch { }
 };
 const clearCache = (key) => { try { localStorage.removeItem(key); } catch { } };
+
+// ─── Upcoming wantlist persistence ────────────────────────────────
+// Stores a set of `raw` keys for upcoming releases the user has added to their
+// Discogs wantlist, so the heart icon persists across page reloads.
+
+const UPCOMING_WANTLIST_LS_KEY = 'spinvinyl_upcoming_wantlist';
+
+const loadAddedUpcomingRaws = () => {
+    try { return new Set(JSON.parse(localStorage.getItem(UPCOMING_WANTLIST_LS_KEY) || '[]')); }
+    catch { return new Set(); }
+};
+
+const saveAddedUpcomingRaw = (raw) => {
+    try {
+        const s = loadAddedUpcomingRaws();
+        s.add(raw);
+        localStorage.setItem(UPCOMING_WANTLIST_LS_KEY, JSON.stringify([...s]));
+    } catch { }
+};
 
 // ─── Shared helpers ───────────────────────────────────────────────
 
@@ -113,76 +132,57 @@ const matchesArtist = (raw, normalizedArtistSet) => {
 };
 
 // ─── Upcoming Release Modal ───────────────────────────────────────
-const UpcomingReleaseModal = ({ release, enrichedData, onClose }) => {
+const UpcomingReleaseModal = ({ release, enrichedData, onClose, addToWantlist, wantlistState }) => {
     const [bio, setBio] = useState(null);
     const [loadingBio, setLoadingBio] = useState(true);
-    const [parsedInfo, setParsedInfo] = useState({ artist: '', title: release.title || release.raw, thumb: enrichedData?.thumb || release.thumb });
+    const [detail, setDetail] = useState(null);
+
+    // Use artist/title from the scraper directly — no Discogs lookup needed
+    const artist = release.artist || (release.raw?.includes(' - ') ? release.raw.split(' - ')[0].trim() : 'Unknown Artist');
+    const title = release.title || release.raw;
+    const thumb = enrichedData?.thumb || release.thumb;
 
     useEffect(() => {
+        let cancelled = false;
+        setDetail(null);
+        setBio(null);
+        setLoadingBio(true);
+
         const fetchInfo = async () => {
-            setLoadingBio(true);
-            try {
-                let finalArtist = release._matchedArtist || '';
-                let finalTitle = release.title || release.raw;
-                let coverArt = enrichedData?.thumb || release.thumb;
-
-                if (!release._matchedArtist) {
-                    const searchRes = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(release.title || release.raw)}`);
-                    if (searchRes.ok) {
-                        const data = await searchRes.json();
-                        const top = data.results?.[0];
-                        if (top) {
-                            if (!coverArt && (top.cover_image || top.thumb)) {
-                                coverArt = top.cover_image || top.thumb;
-                            }
-                            if (top.title && top.title.includes(' - ')) {
-                                const parts = top.title.split(' - ');
-                                finalArtist = parts[0].trim();
-                                finalTitle = parts.slice(1).join(' - ').trim();
-                            }
-                        }
+            // Fetch description + tracklist from upcomingvinyl.com detail page
+            if (release.sourceUrl) {
+                try {
+                    const detailRes = await fetch(`/api/upcoming-detail?url=${encodeURIComponent(release.sourceUrl)}`);
+                    if (detailRes.ok && !cancelled) {
+                        const d = await detailRes.json();
+                        if (d.description || d.tracklist?.length) setDetail(d);
                     }
-                }
-
-                if (!finalArtist) {
-                    if (release.raw.includes(' - ')) {
-                        const parts = release.raw.split(' - ');
-                        finalArtist = parts[0].trim();
-                        finalTitle = parts.slice(1).join(' - ').trim();
-                    } else {
-                        finalArtist = 'Unknown Artist';
-                    }
-                }
-
-                setParsedInfo({ artist: finalArtist, title: finalTitle, thumb: coverArt });
-
-                if (finalArtist && finalArtist !== 'Unknown Artist') {
-                    const wikiName = finalArtist.replace(/ /g, '_');
-                    const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiName)}`);
-                    const wikiData = await wikiRes.json();
-                    if (wikiData.extract) {
-                        setBio({ text: wikiData.extract, url: wikiData.content_urls?.desktop?.page });
-                    } else {
-                        setBio(null);
-                    }
-                } else {
-                    setBio(null);
-                }
-            } catch {
-                setBio(null);
-            } finally {
-                setLoadingBio(false);
+                } catch { /* ignore */ }
             }
+
+            // Fetch Wikipedia bio for the artist
+            if (artist && artist !== 'Unknown Artist') {
+                try {
+                    const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(artist.replace(/ /g, '_'))}`);
+                    const wikiData = await wikiRes.json();
+                    if (!cancelled && wikiData.extract) {
+                        setBio({ text: wikiData.extract, url: wikiData.content_urls?.desktop?.page });
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (!cancelled) setLoadingBio(false);
         };
 
         fetchInfo();
-    }, [release, enrichedData]);
+        return () => { cancelled = true; };
+    }, [release, artist]);
 
-    const amazonUrl = `https://www.amazon.com/s?k=${encodeURIComponent(`${parsedInfo.artist} ${parsedInfo.title} vinyl`)}`;
+    const amazonUrl = `https://www.amazon.com/s?k=${encodeURIComponent(`${artist} ${title} vinyl`)}`;
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
-            <div className="flex-1 sm:flex-none w-full max-w-lg bg-gray-900 sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl mt-12 sm:mt-0 relative">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors"
@@ -190,23 +190,42 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose }) => {
                     <span className="text-xl leading-none">&times;</span>
                 </button>
 
-                <div className="overflow-y-auto p-6 flex-1">
+                <div className="overflow-y-auto p-6 pb-10 flex-1 min-h-0">
                     <div className="flex flex-col items-center text-center">
                         <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-gray-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
-                            {parsedInfo.thumb ? (
-                                <img src={parsedInfo.thumb} alt={parsedInfo.title} className="w-full h-full object-cover" />
+                            {thumb ? (
+                                <img src={thumb} alt={title} className="w-full h-full object-cover" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center">
                                     <Disc3 size={48} className="text-gray-600" />
                                 </div>
                             )}
                         </div>
-                        <h2 className="text-2xl font-bold text-white leading-tight">{parsedInfo.title}</h2>
-                        <p className="text-lg text-gray-400 mt-1">{parsedInfo.artist}</p>
+                        <h2 className="text-2xl font-bold text-white leading-tight">{title}</h2>
+                        <p className="text-lg text-gray-400 mt-1">{artist}</p>
                         <div className="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
                             <span>Upcoming Release</span>
                             <span>·</span>
                             <span className="text-violet-400 font-bold">{release.releaseDate}</span>
+                            {addToWantlist && (() => {
+                                const wState = wantlistState?.[release.raw];
+                                return (
+                                    <button
+                                        onClick={(e) => addToWantlist(e, release)}
+                                        disabled={wState === 'pending'}
+                                        className={`w-7 h-7 flex items-center justify-center rounded-full border transition-all ${
+                                            wState === 'done'
+                                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                                                : wState === 'error'
+                                                ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400'
+                                        }`}
+                                        title={wState === 'done' ? 'Added to Wantlist' : 'Add to Wantlist'}
+                                    >
+                                        {wState === 'pending' ? <Loader2 size={13} className="animate-spin" /> : <Heart size={13} className={wState === 'done' ? 'fill-rose-400' : ''} />}
+                                    </button>
+                                );
+                            })()}
                         </div>
                     </div>
 
@@ -232,9 +251,40 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose }) => {
                         )}
                     </div>
 
+                    {detail?.description && (
+                        <div className="mt-8">
+                            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">About this Release</h3>
+                            <p className="text-sm text-gray-400 leading-relaxed line-clamp-5">{detail.description}</p>
+                        </div>
+                    )}
+
+                    {detail?.tracklist?.length > 0 && (
+                        <div className="mt-6">
+                            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Tracklist</h3>
+                            <ol className="space-y-1">
+                                {detail.tracklist.map((track, i) => (
+                                    <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
+                                        <span className="text-gray-600 w-5 flex-shrink-0 text-right">{i + 1}.</span>
+                                        <span>{track}</span>
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    )}
+
                     <div className="mt-8 space-y-3">
                         <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Links</h3>
                         <div className="grid grid-cols-2 gap-3 pb-8 sm:pb-0">
+                            {release.sourceUrl && (
+                                <a
+                                    href={release.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-violet-200 border border-violet-500/20 transition-colors text-sm font-semibold"
+                                >
+                                    <ExternalLink size={16} /> View on Upcoming Vinyl
+                                </a>
+                            )}
                             <a
                                 href={release.searchUrl}
                                 target="_blank"
@@ -264,13 +314,52 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const [artistSet, setArtistSet] = useState(null);
     const [artistGenres, setArtistGenres] = useState(null);
     const [genrePrefs, setGenrePrefs] = useState(null);
+    const [genreWeights, setGenreWeights] = useState(null);
     const [enriched, setEnriched] = useState({});
     const [loading, setLoading] = useState(false);
     const [enriching, setEnriching] = useState(false);
     const [error, setError] = useState(null);
-    const [showAll, setShowAll] = useState(false);
+
     const [selectedRelease, setSelectedRelease] = useState(null);
+    const [viewMode, setViewMode] = useState('grid');
+    const [wantlistState, setWantlistState] = useState(() => {
+        // Seed from localStorage so hearts persist across page reloads
+        const state = {};
+        loadAddedUpcomingRaws().forEach(raw => { state[raw] = 'done'; });
+        return state;
+    });
+    const [toastMsg, setToastMsg] = useState(null);
     const enrichAttempted = useRef(false);
+
+    const addToWantlist = useCallback(async (e, release) => {
+        e.stopPropagation();
+        const key = release.raw;
+        setWantlistState(prev => {
+            if (prev[key] === 'pending' || prev[key] === 'done') return prev;
+            return { ...prev, [key]: 'pending' };
+        });
+        // Read current state without depending on it as a closure variable
+        try {
+            const q = encodeURIComponent(`${release.artist || ''} ${release.title || release.raw}`.trim());
+            const searchRes = await fetch(`/api/discogs?action=searchRelease&q=${q}`);
+            if (!searchRes.ok) throw new Error('Search failed');
+            const searchData = await searchRes.json();
+            const top = searchData.results?.[0];
+            if (!top?.id) throw new Error('Not found on Discogs');
+            const wantRes = await fetch(`/api/discogs?action=addToWantlist&id=${top.id}`, { method: 'POST' });
+            if (!wantRes.ok && wantRes.status !== 201) throw new Error('Add failed');
+            setWantlistState(prev => ({ ...prev, [key]: 'done' }));
+            saveAddedUpcomingRaw(key);           // persist across reloads
+            clearCache(CACHE_KEYS.wantlist);     // force wantlist tab to re-fetch
+            setToastMsg(`♡ Added "${release.title || release.raw}" to your Wantlist!`);
+            setTimeout(() => setToastMsg(null), 3500);
+        } catch {
+            setWantlistState(prev => ({ ...prev, [key]: 'error' }));
+            setToastMsg('Could not find this release on Discogs.');
+            setTimeout(() => setToastMsg(null), 3500);
+            setTimeout(() => setWantlistState(prev => { const n = { ...prev }; delete n[key]; return n; }), 4000);
+        }
+    }, []);
 
     // ── Build artist/genre profile from the parent's full collection ──
     useEffect(() => {
@@ -298,9 +387,14 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             .slice(0, 20)
             .map(([g]) => g);
 
+        const total = [...genreCount.values()].reduce((s, v) => s + v, 0);
+        const weights = new Map();
+        genreCount.forEach((count, genre) => weights.set(genre, count / total));
+
         setArtistSet(names);
         setArtistGenres(agMap);
         setGenrePrefs(new Set(topGenres));
+        setGenreWeights(weights);
     }, [collection, collectionLoading]);
 
     // ── Background enrichment: artwork + genres for all releases ─────────
@@ -394,31 +488,54 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         if (!artistSet || upcoming.length === 0) return upcoming;
         
         return upcoming.map(r => {
-            const artistMatch = matchesArtist(r.raw, artistSet);
+            // Use artist field directly if available (scraper provides it separately)
+            const normArtist = r.artist ? normalizeArtist(r.artist) : null;
+            const artistMatch = (normArtist && artistSet.has(normArtist)) ? normArtist : matchesArtist(r.raw, artistSet);
             if (artistMatch) {
                 const genres = artistGenres?.get(artistMatch) ? [...artistGenres.get(artistMatch)].slice(0, 4) : [];
-                return { ...r, isForYou: true, _matchedArtist: artistMatch, _genres: genres };
+                return { ...r, isForYou: true, _matchedArtist: r.artist || artistMatch, _genres: genres };
             }
             if (genrePrefs?.size > 0 && enriched[r.raw]?.genres) {
                 const matching = enriched[r.raw].genres.filter(g => genrePrefs.has(g));
                 if (matching.length > 0) {
-                    return { ...r, isMightLike: true, _genres: matching.slice(0, 3), _score: matching.length };
+                    const weightedScore = matching.reduce((s, g) => s + (genreWeights?.get(g) ?? 0), 0);
+                    const sortedGenres = [...matching].sort((a, b) => (genreWeights?.get(b) ?? 0) - (genreWeights?.get(a) ?? 0));
+                    return { ...r, isMightLike: true, _genres: sortedGenres.slice(0, 3), _score: weightedScore };
                 }
             }
             return r;
         });
-    }, [upcoming, artistSet, artistGenres, genrePrefs, enriched]);
+    }, [upcoming, artistSet, artistGenres, genrePrefs, genreWeights, enriched]);
 
     const groupedReleases = useMemo(() => {
         const groups = {};
-        const listToGroup = showAll ? annotatedUpcoming : annotatedUpcoming.slice(0, 30);
-        listToGroup.forEach(r => {
+        annotatedUpcoming.forEach(r => {
             const key = r.releaseDate || 'TBD';
             if (!groups[key]) groups[key] = [];
             groups[key].push(r);
         });
-        return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-    }, [annotatedUpcoming, showAll]);
+        const top3Genres = genreWeights
+            ? new Set([...genreWeights.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g))
+            : null;
+
+        return Object.entries(groups)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([date, items]) => {
+                const sorted = [...items].sort((a, b) => {
+                    const pa = a.isForYou ? 0 : a.isMightLike ? 1 : 2;
+                    const pb = b.isForYou ? 0 : b.isMightLike ? 1 : 2;
+                    if (pa !== pb) return pa - pb;
+                    return (b._score ?? 0) - (a._score ?? 0);
+                });
+                return [date, sorted.slice(0, 5)];
+            })
+            .filter(([, items]) =>
+                items.some(r =>
+                    r.isForYou ||
+                    (r.isMightLike && top3Genres && r._genres?.some(g => top3Genres.has(g)))
+                )
+            );
+    }, [annotatedUpcoming, genreWeights]);
 
     const formatDate = (isoDate) => {
         try {
@@ -429,10 +546,11 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     };
 
     const ReleaseRow = ({ release, isForYou, isMightLike }) => {
+        const wState = wantlistState[release.raw];
         return (
-            <button
+            <div
                 onClick={() => setSelectedRelease(release)}
-                className="w-full text-left flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group"
+                className="w-full text-left flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group cursor-pointer"
             >
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded shadow flex-shrink-0 overflow-hidden bg-white/5 flex items-center justify-center border border-white/10">
                     {release.thumb ? (
@@ -465,12 +583,32 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                         GENRE MATCH
                     </span>
                 )}
-            </button>
+                <button
+                    onClick={(e) => addToWantlist(e, release)}
+                    disabled={wState === 'pending'}
+                    className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border transition-all opacity-0 group-hover:opacity-100 ${
+                        wState === 'done'
+                            ? 'bg-rose-500/20 border-rose-500/40 text-rose-400 opacity-100'
+                            : wState === 'error'
+                            ? 'bg-red-500/20 border-red-500/40 text-red-400 opacity-100'
+                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400'
+                    }`}
+                    title={wState === 'done' ? 'Added to Wantlist' : 'Add to Wantlist'}
+                >
+                    {wState === 'pending' ? <Loader2 size={12} className="animate-spin" /> : <Heart size={12} className={wState === 'done' ? 'fill-rose-400' : ''} />}
+                </button>
+            </div>
         );
     };
 
     return (
         <div>
+            {toastMsg && (
+                <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] px-4 py-3 rounded-2xl text-sm font-semibold shadow-xl backdrop-blur-xl border transition-all ${toastMsg.startsWith('♡') ? 'bg-violet-900/90 text-violet-200 border-violet-500/30' : 'bg-rose-900/90 text-rose-200 border-rose-500/30'}`}>
+                    {toastMsg}
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
                 <div>
@@ -480,14 +618,30 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                         {collectionLoading && <span className="ml-2 text-violet-400">Loading your collection…</span>}
                     </p>
                 </div>
-                <button
-                    onClick={() => fetchUpcoming(true)}
-                    disabled={loading}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
-                    title="Refresh"
-                >
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={() => setViewMode('list')}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        title="List view"
+                    >
+                        <LayoutList size={14} />
+                    </button>
+                    <button
+                        onClick={() => setViewMode('grid')}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        title="Tile view"
+                    >
+                        <LayoutGrid size={14} />
+                    </button>
+                    <button
+                        onClick={() => fetchUpcoming(true)}
+                        disabled={loading}
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                        title="Refresh"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </div>
 
             {/* Loading skeleton */}
@@ -509,10 +663,12 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
             {/* Modal */}
             {selectedRelease && (
-                <UpcomingReleaseModal 
-                    release={selectedRelease} 
-                    enrichedData={enriched[selectedRelease.raw]} 
-                    onClose={() => setSelectedRelease(null)} 
+                <UpcomingReleaseModal
+                    release={selectedRelease}
+                    enrichedData={enriched[selectedRelease.raw]}
+                    onClose={() => setSelectedRelease(null)}
+                    addToWantlist={addToWantlist}
+                    wantlistState={wantlistState}
                 />
             )}
 
@@ -536,27 +692,72 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     )}
 
                     {groupedReleases.map(([date, items]) => (
-                        <div key={date} className="mb-4">
-                            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 px-1">
-                                {formatDate(date)}
-                            </p>
-                            <div className="space-y-0.5 rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden p-1">
-                                {items.map((r, i) => (
-                                    <ReleaseRow key={`${r.raw}-${i}`} release={r} isForYou={r.isForYou} isMightLike={r.isMightLike} />
-                                ))}
-                            </div>
+                        <div key={date} className="mb-5">
+                            <a
+                                href="https://upcomingvinyl.com/featured"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[11px] font-semibold text-gray-500 hover:text-violet-400 uppercase tracking-wider mb-1 px-1 inline-flex items-center gap-1 transition-colors"
+                            >
+                                {formatDate(date)} <ExternalLink size={9} />
+                            </a>
+                            {viewMode === 'list' ? (
+                                <div className="space-y-0.5 rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden p-1">
+                                    {items.map((r, i) => (
+                                        <ReleaseRow key={`${r.raw}-${i}`} release={r} isForYou={r.isForYou} isMightLike={r.isMightLike} />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {items.map((r, i) => {
+                                        const wState = wantlistState[r.raw];
+                                        return (
+                                            <div
+                                                key={`${r.raw}-${i}`}
+                                                onClick={() => setSelectedRelease(r)}
+                                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 text-left cursor-pointer"
+                                            >
+                                                <div className="aspect-square bg-gray-800 relative overflow-hidden">
+                                                    {r.thumb ? (
+                                                        <img src={r.thumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center">
+                                                            <Disc3 size={28} className="text-gray-600" />
+                                                        </div>
+                                                    )}
+                                                    {(r.isForYou || r.isMightLike) && (
+                                                        <div className="absolute top-2 left-2">
+                                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${r.isForYou ? 'bg-violet-500/80 text-white border-violet-400/50' : 'bg-pink-500/80 text-white border-pink-400/50'}`}>
+                                                                {r.isForYou ? 'ARTIST' : 'GENRE'}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        onClick={(e) => addToWantlist(e, r)}
+                                                        disabled={wState === 'pending'}
+                                                        className={`absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full border backdrop-blur-sm transition-all ${
+                                                            wState === 'done'
+                                                                ? 'bg-rose-500/30 border-rose-400/60 text-rose-300'
+                                                                : wState === 'error'
+                                                                ? 'bg-red-500/30 border-red-400/60 text-red-300'
+                                                                : 'bg-black/50 border-white/20 text-white opacity-0 group-hover:opacity-100'
+                                                        }`}
+                                                        title={wState === 'done' ? 'Added to Wantlist' : 'Add to Wantlist'}
+                                                    >
+                                                        {wState === 'pending' ? <Loader2 size={12} className="animate-spin" /> : <Heart size={12} className={wState === 'done' ? 'fill-rose-300' : ''} />}
+                                                    </button>
+                                                </div>
+                                                <div className="p-2.5">
+                                                    <p className="text-[11px] font-bold text-white truncate leading-tight group-hover:text-violet-300 transition-colors">{r.artist || r.raw}</p>
+                                                    <p className="text-[10px] text-gray-400 truncate mt-0.5">{r.title}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     ))}
-                    {annotatedUpcoming.length > 30 && (
-                        <button
-                            onClick={() => setShowAll(s => !s)}
-                            className="w-full mt-2 py-2 text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 transition-colors"
-                        >
-                            {showAll
-                                ? <><ChevronUp size={14} /> Show Less</>
-                                : <><ChevronDown size={14} /> Show {annotatedUpcoming.length - 30} More</>}
-                        </button>
-                    )}
                 </div>
             )}
         </div>
@@ -723,6 +924,7 @@ const WantlistSection = () => {
     const [error, setError] = useState(null);
     const [removeState, setRemoveState] = useState({}); // { id: 'pending'|'error' }
     const [selectedRelease, setSelectedRelease] = useState(null);
+    const [viewMode, setViewMode] = useState('grid');
 
     const fetchWantlist = useCallback(async (force = false) => {
         if (!force) {
@@ -784,14 +986,30 @@ const WantlistSection = () => {
                     <h2 className="text-base font-bold text-white">Your Wantlist</h2>
                     <p className="text-xs text-gray-500 mt-0.5">Records you've marked to complete your collection</p>
                 </div>
-                <button
-                    onClick={() => fetchWantlist(true)}
-                    disabled={loading}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
-                    title="Refresh"
-                >
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={() => setViewMode('list')}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        title="List view"
+                    >
+                        <LayoutList size={14} />
+                    </button>
+                    <button
+                        onClick={() => setViewMode('grid')}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        title="Tile view"
+                    >
+                        <LayoutGrid size={14} />
+                    </button>
+                    <button
+                        onClick={() => fetchWantlist(true)}
+                        disabled={loading}
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                        title="Refresh"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </div>
 
             {loading && (
@@ -814,7 +1032,7 @@ const WantlistSection = () => {
                 </div>
             )}
 
-            {!loading && wants.length > 0 && (
+            {!loading && wants.length > 0 && viewMode === 'grid' && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {wants.map(item => {
                         const info = item.basic_information || {};
@@ -822,11 +1040,10 @@ const WantlistSection = () => {
                         const artistName = (info.artists || []).map(a => cleanName(a.name)).join(', ');
                         const img = info.thumb || info.cover_image;
                         const label = info.labels?.[0]?.name || '';
-                        
                         return (
                             <div
                                 key={item.id}
-                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer text-left focus:outline-none"
+                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer text-left"
                                 onClick={() => setSelectedRelease({ release: { ...info, id: item.id, label, type: 'release' }, artistName })}
                             >
                                 <div className="aspect-square bg-gray-800 relative overflow-hidden">
@@ -848,14 +1065,56 @@ const WantlistSection = () => {
                                     <p className="text-[11px] text-gray-400 truncate mt-0.5">{artistName}</p>
                                     {label && <p className="text-[10px] text-gray-600 truncate mt-0.5">{label}</p>}
                                 </div>
-
-                                {/* Remove Button */}
                                 <button
                                     onClick={(e) => handleRemove(e, item.id)}
                                     className="absolute bottom-3 right-3 w-7 h-7 bg-black/60 hover:bg-rose-500/80 backdrop-blur rounded-full flex items-center justify-center text-white border border-white/10 opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0 shadow-xl"
                                     title="Remove from Wantlist"
                                 >
-                                    {removeState[item.id] === 'pending' ? <Loader2 size={12} className="animate-spin" /> : 
+                                    {removeState[item.id] === 'pending' ? <Loader2 size={12} className="animate-spin" /> :
+                                     removeState[item.id] === 'error' ? <AlertCircle size={12} className="text-rose-400" /> : <Trash2 size={12} />}
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {!loading && wants.length > 0 && viewMode === 'list' && (
+                <div className="space-y-1">
+                    {wants.map(item => {
+                        const info = item.basic_information || {};
+                        const title = info.title;
+                        const artistName = (info.artists || []).map(a => cleanName(a.name)).join(', ');
+                        const img = info.thumb || info.cover_image;
+                        const label = info.labels?.[0]?.name || '';
+                        return (
+                            <div
+                                key={item.id}
+                                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
+                                onClick={() => setSelectedRelease({ release: { ...info, id: item.id, label, type: 'release' }, artistName })}
+                            >
+                                <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
+                                    {img ? (
+                                        <img src={img} alt={title} className="w-full h-full object-cover" loading="lazy" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <Disc3 size={16} className="text-gray-600" />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-white truncate group-hover:text-violet-300 transition-colors">{title}</p>
+                                    <p className="text-[11px] text-gray-400 truncate">{artistName}{label ? ` · ${label}` : ''}</p>
+                                </div>
+                                {info.year && info.year !== 0 && (
+                                    <span className="text-[10px] text-gray-600 flex-shrink-0">{info.year}</span>
+                                )}
+                                <button
+                                    onClick={(e) => handleRemove(e, item.id)}
+                                    className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"
+                                    title="Remove from Wantlist"
+                                >
+                                    {removeState[item.id] === 'pending' ? <Loader2 size={12} className="animate-spin" /> :
                                      removeState[item.id] === 'error' ? <AlertCircle size={12} className="text-rose-400" /> : <Trash2 size={12} />}
                                 </button>
                             </div>
@@ -896,8 +1155,8 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
     }, [artistName]);
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
-            <div className="flex-1 sm:flex-none w-full max-w-lg bg-gray-900 sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl mt-12 sm:mt-0 relative">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
                 
                 {/* Close Button */}
                 <button
@@ -907,7 +1166,7 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                     <span className="text-xl leading-none">&times;</span>
                 </button>
 
-                <div className="overflow-y-auto overflow-x-hidden p-6 flex-1 no-scrollbar">
+                <div className="overflow-y-auto overflow-x-hidden p-6 flex-1 min-h-0 no-scrollbar">
                     {/* Header: Cover & Title */}
                     <div className="flex flex-col items-center text-center">
                         <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-gray-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
@@ -1000,7 +1259,7 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
     );
 };
 
-const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArtistTitles }) => {
+const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collectionLoading }) => {
     const [gaps, setGaps] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -1008,11 +1267,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
     const [wantlistState, setWantlistState] = useState({}); // { [releaseId]: 'pending' | 'done' | 'error' }
     const [toastMsg, setToastMsg] = useState(null);
     const [selectedRelease, setSelectedRelease] = useState(null);
-
-    const isVinylRelease = (r) => {
-        const fmt = (r.format || '').toLowerCase();
-        return fmt.includes('vinyl') || fmt.includes('lp') || fmt.includes('12"') || fmt.includes('10"') || fmt.includes('7"') || fmt.includes('album');
-    };
+    const [sortBy, setSortBy] = useState('pct_desc');
 
     const fetchGaps = useCallback(async (force = false) => {
         if (!force) {
@@ -1024,63 +1279,77 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
         setError(null);
         clearCache(CACHE_KEYS.gaps);
 
-        const topArtists = collectionArtists.slice(0, 15);
+        // Exclude "Various" artists; take enough candidates to reliably get 10 results
+        const topArtists = collectionArtists
+            .filter(a => !/^various/i.test(a.name.trim()))
+            .slice(0, 25);
         const gapData = [];
 
         for (const artist of topArtists) {
             try {
-                const res = await fetch(`/api/discogs?action=artistReleases&id=${artist.id}`);
-                if (!res.ok) continue;
-                const data = await res.json();
+                // Fetch master releases for this artist via search API.
+                // Masters are deduplicated canonical albums — one entry per album regardless
+                // of pressings. For most artists this is 1–2 pages instead of 10+.
+                let allMasters = [];
+                const MAX_PAGES = 5;
+                for (let p = 1; p <= MAX_PAGES; p++) {
+                    const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
+                    if (!res.ok) break;
+                    const data = await res.json();
+                    allMasters = allMasters.concat(data.results || []);
+                    const totalPages = data.pagination?.pages ?? 1;
+                    if (p >= totalPages) break;
+                    await new Promise(r => setTimeout(r, 300));
+                }
 
-                // We want Main role works. Master releases group different formats, so we accept them.
-                // Standalone releases (no master) need a format check to ensure they are vinyl.
-                const validReleases = (data.releases || []).filter(r => {
-                    if (r.role !== 'Main') return false;
-                    if (r.type === 'master') return true;
-                    return isVinylRelease(r);
+                // Filter to album-length releases only (exclude Singles, EPs).
+                // Discogs search returns r.format as an array of strings e.g. ["Vinyl","LP","Album"]
+                const albumMasters = allMasters.filter(r => {
+                    const fmts = (r.format || []).map(f => f.toLowerCase());
+                    return !fmts.some(f => f === 'single' || f === 'ep' || f === '7"');
                 });
 
-                if (validReleases.length === 0) continue;
+                if (albumMasters.length === 0) continue;
 
-                // Deduplicate by title to ensure we don't show multiple variants of the same album
-                const uniqueReleasesMap = new Map();
-                for (const r of validReleases) {
-                    let t = (r.title || '').toLowerCase().trim();
-                    // Prefer master releases over standalone releases if there are duplicates
-                    if (!uniqueReleasesMap.has(t) || (uniqueReleasesMap.get(t).type !== 'master' && r.type === 'master')) {
-                        uniqueReleasesMap.set(t, r);
-                    }
+                // Deduplicate by title (search can return duplicates across pages)
+                const seen = new Map();
+                for (const r of albumMasters) {
+                    const t = (r.title || '').toLowerCase().trim();
+                    if (!seen.has(t)) seen.set(t, r);
                 }
-                const uniqueReleases = Array.from(uniqueReleasesMap.values());
+                const uniqueMasters = Array.from(seen.values());
 
-                const artistNameCanonical = artist.name.toLowerCase();
+                // Match by master ID — exact lookup, no fuzzy title matching needed
+                const isOwned = (r) => ownedMasterIds.has(String(r.id));
 
-                const isOwned = (r) => {
-                    const titleCanonical = (r.title || '').toLowerCase().trim();
-                    return ownedMasterIds.has(String(r.id)) || 
-                           ownedArtistTitles.has(`${artistNameCanonical}:::${titleCanonical}`);
-                };
+                const owned = uniqueMasters.filter(isOwned);
+                const missing = uniqueMasters.filter(r => !isOwned(r));
+                // Use collection count as owned floor — it's ground truth
+                const ownedCount = Math.max(owned.length, artist.count);
+                const total = uniqueMasters.length + Math.max(0, ownedCount - owned.length);
+                const pct = total > 0 ? Math.round((ownedCount / total) * 100) : 100;
 
-                const owned = uniqueReleases.filter(isOwned);
-                const missing = uniqueReleases.filter(r => !isOwned(r));
-                const pct = Math.round((owned.length / uniqueReleases.length) * 100);
-
-                gapData.push({ artist, total: uniqueReleases.length, ownedCount: owned.length, missing, pct });
+                gapData.push({ artist, total, ownedCount, missing, pct });
             } catch { /* skip this artist */ }
 
-            // Small delay to respect Discogs rate limit (60 req/min authenticated)
+            // Respect Discogs rate limit between artists
             await new Promise(r => setTimeout(r, 300));
         }
 
-        // Sort: most owned records first (they are the ones who care most about completing their collection)
-        gapData.sort((a, b) => b.artist.count - a.artist.count);
         setGaps(gapData);
         writeCache(CACHE_KEYS.gaps, gapData);
         setLoading(false);
-    }, [collectionArtists, ownedMasterIds, ownedArtistTitles]);
+    }, [collectionArtists, ownedMasterIds]);
 
-    useEffect(() => { if (collectionArtists.length) fetchGaps(); }, [fetchGaps]);
+    const prevCollectionLoadingRef = React.useRef(collectionLoading);
+    useEffect(() => {
+        const wasLoading = prevCollectionLoadingRef.current;
+        prevCollectionLoadingRef.current = collectionLoading;
+        // Collection just finished loading — clear any gaps cached from a partial collection
+        if (wasLoading && !collectionLoading) clearCache(CACHE_KEYS.gaps);
+    }, [collectionLoading]);
+
+    useEffect(() => { if (collectionArtists.length && !collectionLoading) fetchGaps(); }, [fetchGaps, collectionLoading]);
 
     const toggleArtist = (artistId) => {
         setExpandedArtists(prev => {
@@ -1132,14 +1401,26 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
                     <h2 className="text-base font-bold text-white">Complete Your Collection</h2>
                     <p className="text-xs text-gray-500 mt-0.5">Vinyl albums you don't own yet, by artists you collect</p>
                 </div>
-                <button
-                    onClick={() => fetchGaps(true)}
-                    disabled={loading}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
-                    title="Refresh"
-                >
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={sortBy}
+                        onChange={e => setSortBy(e.target.value)}
+                        className="text-xs bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-gray-300 focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                    >
+                        <option value="pct_desc">% Complete</option>
+                        <option value="owned_desc">Albums Owned</option>
+                        <option value="missing_asc">Missing Albums</option>
+                        <option value="name_asc">Artist Name</option>
+                    </select>
+                    <button
+                        onClick={() => fetchGaps(true)}
+                        disabled={loading}
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                        title="Refresh"
+                    >
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
             </div>
 
             {loading && (
@@ -1157,7 +1438,14 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
                 </div>
             )}
 
-            {!loading && gaps.length === 0 && !error && (
+            {collectionLoading && (
+                <div className="flex flex-col items-center gap-3 py-12 text-gray-500 text-sm">
+                    <Loader2 size={28} className="animate-spin text-violet-500" />
+                    <p>Waiting for your full collection to load…</p>
+                </div>
+            )}
+
+            {!collectionLoading && !loading && gaps.length === 0 && !error && (
                 <div className="text-center py-12 text-gray-500 text-sm">
                     <CheckCircle size={36} className="mx-auto mb-3 opacity-20" />
                     <p>No gap data yet. Make sure your collection is loaded.</p>
@@ -1166,7 +1454,13 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
 
             {!loading && gaps.length > 0 && (
                 <div className="space-y-4">
-                    {gaps.map(({ artist, total, ownedCount, missing, pct }) => {
+                    {[...gaps.filter(g => g.pct < 100)].sort((a, b) => {
+                        if (sortBy === 'pct_desc') return b.pct - a.pct;
+                        if (sortBy === 'owned_desc') return b.ownedCount - a.ownedCount;
+                        if (sortBy === 'missing_asc') return a.missing.length - b.missing.length;
+                        if (sortBy === 'name_asc') return a.artist.name.localeCompare(b.artist.name);
+                        return 0;
+                    }).map(({ artist, total, ownedCount, missing, pct }) => {
                         const isExpanded = expandedArtists.has(artist.id);
                         return (
                             <div key={artist.id} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
@@ -1271,14 +1565,14 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
-    { id: 'newReleases', label: 'Upcoming Releases', icon: Disc3 },
     { id: 'vinylNews', label: 'Vinyl News', icon: Newspaper },
-    { id: 'completeCollection', label: 'Complete Collection', icon: Heart },
-    { id: 'wantlist', label: 'Wantlist', icon: Bookmark },
+    { id: 'newReleases', label: 'Upcoming Releases', icon: Disc3 },
+    { id: 'completeCollection', label: 'Complete Collection', icon: Library },
+    { id: 'wantlist', label: 'Wantlist', icon: Heart },
 ];
 
 const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
-    const [activeTab, setActiveTab] = useState('newReleases');
+    const [activeTab, setActiveTab] = useState('vinylNews');
 
     // Extract unique artists + their counts from the user's collection
     const collectionArtists = useMemo(() => {
@@ -1311,20 +1605,6 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
         releases.forEach(r => {
             if (r.basic_information?.master_id) s.add(String(r.basic_information.master_id));
             if (r.basic_information?.id) s.add(String(r.basic_information.id));
-        });
-        return s;
-    }, [releases]);
-
-    // Set of artist:::title pairs to catch variants that don't share a master ID
-    const ownedArtistTitles = useMemo(() => {
-        const s = new Set();
-        releases.forEach(r => {
-            const title = (r.basic_information?.title || '').toLowerCase().trim();
-            (r.basic_information?.artists || []).forEach(a => {
-                if (!a.name) return;
-                const artistNameCanonical = cleanName(a.name).toLowerCase();
-                s.add(`${artistNameCanonical}:::${title}`);
-            });
         });
         return s;
     }, [releases]);
@@ -1381,7 +1661,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
                     <CompleteCollectionSection
                         collectionArtists={collectionArtists}
                         ownedMasterIds={ownedMasterIds}
-                        ownedArtistTitles={ownedArtistTitles}
+                        collectionLoading={collectionLoading}
                     />
                 )}
                 {activeTab === 'wantlist' && (

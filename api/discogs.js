@@ -278,6 +278,16 @@ export default async function handler(req, res) {
             apiUrl = `${DISCOGS_BASE}/artists/${releaseId}/releases?sort=year&sort_order=desc&page=${arPage}&per_page=${arPerPage}`;
             break;
         }
+        case 'artistMasters': {
+            // Search for master (canonical) releases by artist name — used for gap analysis.
+            // Masters deduplicate pressings/reissues into one entry per album, so this returns
+            // a clean album list (~50 results) rather than the full discography (100s of pages).
+            const amArtist = url.searchParams.get('artist') || req.query?.artist || '';
+            if (!amArtist) return res.status(400).json({ error: 'Missing artist name' });
+            const amPage = url.searchParams.get('page') || '1';
+            apiUrl = `${DISCOGS_BASE}/database/search?artist=${encodeURIComponent(amArtist)}&type=master&per_page=100&page=${amPage}`;
+            break;
+        }
         case 'newReleases': {
             // Search for recent vinyl releases by artist name
             const artistName = url.searchParams.get('artist') || req.query?.artist || '';

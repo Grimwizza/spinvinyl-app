@@ -8,6 +8,7 @@ export const BADGE_CATEGORIES = [
     'Streak & Consistency',
     'Collection Explorer',
     'Record Counts',
+    'Complete Collection',
 ];
 
 // Helper — max value in a label/genre plays map
@@ -34,6 +35,16 @@ const getConsecutiveDays = (stats) => {
 const getUniqueDays = (stats) => new Set(
     (stats.sessions || []).map(s => s.startTime?.slice(0, 10)).filter(Boolean)
 ).size;
+
+// Helper — count artists with 100% collection completion from gaps cache
+const getCompletedArtistCount = () => {
+    try {
+        const raw = localStorage.getItem('spinvinyl_gaps_cache');
+        if (!raw) return 0;
+        const { data } = JSON.parse(raw);
+        return (data || []).filter(g => g.pct === 100).length;
+    } catch { return 0; }
+};
 
 export const BADGES = [
 
@@ -272,6 +283,36 @@ export const BADGES = [
         category: 'Record Counts',
         rarity: 'legendary',
         condition: (_stats, collection) => (collection?.total || 0) >= 500,
+    },
+
+    // ─── Complete Collection ──────────────────────────────────────
+
+    {
+        id: 'completionist',
+        name: 'Completionist',
+        description: 'Own every vinyl album in one artist\'s discography',
+        emoji: '🎯',
+        category: 'Complete Collection',
+        rarity: 'uncommon',
+        condition: () => getCompletedArtistCount() >= 1,
+    },
+    {
+        id: 'true_fan',
+        name: 'True Fan',
+        description: 'Complete the full discography of 3 different artists',
+        emoji: '🌟',
+        category: 'Complete Collection',
+        rarity: 'rare',
+        condition: () => getCompletedArtistCount() >= 3,
+    },
+    {
+        id: 'discographer',
+        name: 'Discographer',
+        description: 'Complete the full discography of 5 different artists',
+        emoji: '👑',
+        category: 'Complete Collection',
+        rarity: 'legendary',
+        condition: () => getCompletedArtistCount() >= 5,
     },
 ];
 
