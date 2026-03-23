@@ -239,12 +239,16 @@ export default async function handler(req, res) {
             if (!releaseId) return res.status(400).json({ error: 'Missing artist id' });
             apiUrl = `${DISCOGS_BASE}/artists/${releaseId}`;
             break;
+        case 'master':
+            if (!releaseId) return res.status(400).json({ error: 'Missing master id' });
+            apiUrl = `${DISCOGS_BASE}/masters/${releaseId}`;
+            break;
         // ─── New Releases Tab actions ──────────────────────────────────
         case 'artistReleases': {
             // Full discography for an artist — used for gap analysis
             if (!releaseId) return res.status(400).json({ error: 'Missing artist id' });
             const arPage = url.searchParams.get('page') || '1';
-            const arPerPage = url.searchParams.get('per_page') || '100';
+            const arPerPage = url.searchParams.get('per_page') || '500';
             apiUrl = `${DISCOGS_BASE}/artists/${releaseId}/releases?sort=year&sort_order=desc&page=${arPage}&per_page=${arPerPage}`;
             break;
         }

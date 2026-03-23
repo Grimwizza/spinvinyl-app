@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, Star } from 'lucide-react';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -529,12 +529,15 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
     const { release, artistName } = releaseInfo;
     const [bio, setBio] = useState(null);
     const [loadingBio, setLoadingBio] = useState(true);
+    const [albumDetails, setAlbumDetails] = useState(null);
+    const [loadingDetails, setLoadingDetails] = useState(true);
 
-    const releaseId = String(release.main_release || release.id);
-    const wState = wantlistState[releaseId];
+    // Wantlist requires a specific release ID, not a master ID.
+    const wantlistReleaseId = String(release.main_release || release.id);
+    const wState = wantlistState[wantlistReleaseId];
 
-    // Discogs typically uses /master/{id} or /release/{id}
-    const discogsQuery = release.type === 'master' ? `/master/${releaseId}` : `/release/${releaseId}`;
+    // Discogs Web URL uses the master/release ID directly.
+    const discogsQuery = release.type === 'master' ? `/master/${release.id}` : `/release/${release.id}`;
     const discogsUrl = `https://www.discogs.com${release.uri || discogsQuery}`;
     const amazonUrl = `https://www.amazon.com/s?k=${encodeURIComponent(`${artistName} ${release.title} vinyl`)}`;
     
@@ -550,6 +553,19 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
             .catch(() => {})
             .finally(() => setLoadingBio(false));
     }, [artistName]);
+
+    useEffect(() => {
+        // Fetch Discogs Details (rating, tracklist)
+        setLoadingDetails(true);
+        const action = release.type === 'master' ? 'master' : 'release';
+        fetch(`/api/discogs?action=${action}&id=${release.id}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data && !data.error) setAlbumDetails(data);
+            })
+            .catch(() => {})
+            .finally(() => setLoadingDetails(false));
+    }, [release.id, release.type]);
 
     return (
         <div className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
@@ -607,12 +623,57 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                         )}
                     </div>
 
+                    {/* Album Details Snippet */}
+                    <div className="mt-8">
+                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Album Info</h3>
+                        {loadingDetails ? (
+                            <div className="space-y-2 animate-pulse">
+                                <div className="h-3 bg-white/5 rounded w-1/4 mb-4" />
+                                <div className="h-3 bg-white/5 rounded w-full" />
+                                <div className="h-3 bg-white/5 rounded w-5/6" />
+                            </div>
+                        ) : albumDetails ? (
+                            <div className="space-y-4">
+                                {albumDetails.community?.rating?.average && (
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded-md text-[11px] font-bold border border-yellow-500/20">
+                                            <Star size={10} fill="currentColor" />
+                                            {albumDetails.community.rating.average.toFixed(2)} / 5
+                                        </div>
+                                        <span className="text-[11px] text-gray-500 font-medium">{albumDetails.community.rating.count} ratings</span>
+                                    </div>
+                                )}
+                                {albumDetails.tracklist && albumDetails.tracklist.length > 0 && (
+                                    <div>
+                                        <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-2">Tracklist Preview</p>
+                                        <ul className="text-xs text-gray-400 space-y-1.5 bg-black/20 rounded-xl p-3 border border-white/5">
+                                            {albumDetails.tracklist.slice(0, 5).map((t, i) => (
+                                                <li key={i} className="flex gap-2">
+                                                    <span className="text-gray-600 w-4 text-right">{t.position || i + 1}.</span> 
+                                                    <span className="truncate flex-1">{t.title}</span>
+                                                    {t.duration && <span className="text-gray-600 ml-auto flex-shrink-0">{t.duration}</span>}
+                                                </li>
+                                            ))}
+                                            {albumDetails.tracklist.length > 5 && (
+                                                <li className="text-xs text-gray-600 italic pt-1 text-center">
+                                                    + {albumDetails.tracklist.length - 5} more tracks
+                                                </li>
+                                            )}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-500 italic">No details available.</p>
+                        )}
+                    </div>
+
                     {/* Purchase Actions */}
                     <div className="mt-8 space-y-3">
                         <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Options</h3>
                         
                         <button
-                            onClick={() => addToWantlist(releaseId, release.title)}
+                            onClick={() => addToWantlist(wantlistReleaseId, release.title)}
                             disabled={wState === 'pending' || wState === 'done'}
                             className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold transition-all ${
                                 wState === 'done' 
@@ -665,6 +726,14 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
     const [toastMsg, setToastMsg] = useState(null);
     const [selectedRelease, setSelectedRelease] = useState(null);
 
+    const cleanTitle = (t) => {
+        if (!t) return '';
+        return t.toLowerCase()
+            .replace(/\([^)]*\)/g, '') // remove parentheses and contents
+            .replace(/\[[^\]]*\]/g, '') // remove brackets and contents
+            .replace(/[^a-z0-9]/g, ''); // remove all non-alphanumeric characters
+    };
+
     const isVinylRelease = (r) => {
         const fmt = (r.format || '').toLowerCase();
         return fmt.includes('vinyl') || fmt.includes('lp') || fmt.includes('12"') || fmt.includes('10"') || fmt.includes('7"') || fmt.includes('album');
@@ -702,7 +771,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
                 // Deduplicate by title to ensure we don't show multiple variants of the same album
                 const uniqueReleasesMap = new Map();
                 for (const r of validReleases) {
-                    let t = (r.title || '').toLowerCase().trim();
+                    let t = cleanTitle(r.title);
                     // Prefer master releases over standalone releases if there are duplicates
                     if (!uniqueReleasesMap.has(t) || (uniqueReleasesMap.get(t).type !== 'master' && r.type === 'master')) {
                         uniqueReleasesMap.set(t, r);
@@ -710,12 +779,23 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedArt
                 }
                 const uniqueReleases = Array.from(uniqueReleasesMap.values());
 
-                const artistNameCanonical = artist.name.toLowerCase();
+                const artistNameCanonical = cleanName(artist.name).toLowerCase();
 
                 const isOwned = (r) => {
-                    const titleCanonical = (r.title || '').toLowerCase().trim();
-                    return ownedMasterIds.has(String(r.id)) || 
-                           ownedArtistTitles.has(`${artistNameCanonical}:::${titleCanonical}`);
+                    // We check if either the masterId is owned, OR if the title matches 
+                    // an owned title from this artist. We use the same cleanTitle logic.
+                    const titleCanonicalCleaned = cleanTitle(r.title);
+                    
+                    if (ownedMasterIds.has(String(r.id))) return true;
+
+                    // iterate over ownedArtistTitles and see if any matching artist has the same clean title
+                    for (const ownedKey of ownedArtistTitles) {
+                        const [oArtist, oTitle] = ownedKey.split(':::');
+                        if (oArtist === artistNameCanonical && cleanTitle(oTitle) === titleCanonicalCleaned) {
+                            return true;
+                        }
+                    }
+                    return false;
                 };
 
                 const owned = uniqueReleases.filter(isOwned);
