@@ -29,7 +29,7 @@ export default async function handler(req, res) {
         return res.status(200).end();
     }
 
-    if (req.method !== 'GET') {
+    if (req.method !== 'GET' && req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
@@ -225,6 +225,7 @@ export default async function handler(req, res) {
     const sortOrder = url.searchParams.get('sort_order') || req.query?.sort_order || 'asc';
 
     let apiUrl;
+    let apiMethod = 'GET';
 
     switch (action) {
         case 'collection':
@@ -238,15 +239,52 @@ export default async function handler(req, res) {
             if (!releaseId) return res.status(400).json({ error: 'Missing artist id' });
             apiUrl = `${DISCOGS_BASE}/artists/${releaseId}`;
             break;
+        // ─── New Releases Tab actions ──────────────────────────────────
+        case 'artistReleases': {
+            // Full discography for an artist — used for gap analysis
+            if (!releaseId) return res.status(400).json({ error: 'Missing artist id' });
+            const arPage = url.searchParams.get('page') || '1';
+            const arPerPage = url.searchParams.get('per_page') || '100';
+            apiUrl = `${DISCOGS_BASE}/artists/${releaseId}/releases?sort=year&sort_order=desc&page=${arPage}&per_page=${arPerPage}`;
+            break;
+        }
+        case 'newReleases': {
+            // Search for recent vinyl releases by artist name
+            const artistName = url.searchParams.get('artist') || req.query?.artist || '';
+            if (!artistName) return res.status(400).json({ error: 'Missing artist name' });
+            apiUrl = `${DISCOGS_BASE}/database/search?artist=${encodeURIComponent(artistName)}&type=release&format=Vinyl&sort=year&sort_order=desc&per_page=5`;
+            break;
+        }
+        case 'addToWantlist': {
+            // Add a release to the user’s Discogs Wantlist
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
+            apiUrl = `${DISCOGS_BASE}/users/${username}/wants/${releaseId}`;
+            apiMethod = 'PUT';
+            break;
+        }
+        case 'getWantlist': {
+            // Fetch the user's Discogs Wantlist
+            apiUrl = `${DISCOGS_BASE}/users/${username}/wants?page=${page}&per_page=${perPage}&sort=added&sort_order=desc`;
+            apiMethod = 'GET';
+            break;
+        }
+        case 'removeFromWantlist': {
+            // Remove a release from the user’s Discogs Wantlist
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
+            apiUrl = `${DISCOGS_BASE}/users/${username}/wants/${releaseId}`;
+            apiMethod = 'DELETE';
+            break;
+        }
         default:
             return res.status(400).json({ error: 'Invalid action.' });
     }
 
-    const requestData = { url: apiUrl, method: 'GET' };
+    const requestData = { url: apiUrl, method: apiMethod };
 
     try {
         const authHeader = oauth.toHeader(oauth.authorize(requestData, userToken));
         const response = await fetch(apiUrl, {
+            method: apiMethod,
             headers: {
                 ...authHeader,
                 'User-Agent': USER_AGENT,

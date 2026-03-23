@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info } from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass } from 'lucide-react';
+import { recordSession, getStoredStats } from '../lib/statsEngine.js';
+import { checkAndAwardBadges } from '../lib/badgeEngine.js';
+import BadgeToast from '../components/BadgeToast.jsx';
+import AchievementsPage from './AchievementsPage.jsx';
+import StatsPage from './StatsPage.jsx';
+import ReleasesPage from './ReleasesPage.jsx';
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -534,7 +540,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                         <User size={14} className="text-violet-400" />
                                         <span className="text-xs font-semibold uppercase tracking-wider text-violet-400">About {artist}</span>
                                     </div>
-                                    <p className="text-xs sm:text-sm text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-line">
+                                    <p className="text-sm text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-line">
                                         {artistBio}
                                     </p>
                                     {artistInfo?.url && (
@@ -552,7 +558,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                         <Music2 size={14} className="text-pink-400" />
                                         <span className="text-xs font-semibold uppercase tracking-wider text-pink-400">About This Release</span>
                                     </div>
-                                    <p className="text-xs sm:text-sm text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-line">
+                                    <p className="text-sm text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-line">
                                         {albumNotes}
                                     </p>
                                     {detail?.uri && (
@@ -592,14 +598,14 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                             </div>
                                             <div className="space-y-0.5">
                                                 {sides[side].map((track, idx) => (
-                                                    <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/[0.03] transition-colors group">
-                                                        <span className="text-xs text-gray-500 w-6 text-right tabular-nums font-medium">
+                                                    <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.03] transition-colors group">
+                                                        <span className="text-sm sm:text-xs text-gray-500 w-6 text-right tabular-nums font-medium">
                                                             {track.position || idx + 1}
                                                         </span>
-                                                        <span className="flex-1 text-sm text-gray-300 group-hover:text-white transition-colors truncate">
+                                                        <span className="flex-1 text-base sm:text-sm text-gray-300 group-hover:text-white transition-colors truncate">
                                                             {track.title}
                                                         </span>
-                                                        <span className="text-xs text-gray-500 tabular-nums">
+                                                        <span className="text-sm sm:text-xs text-gray-500 tabular-nums">
                                                             {track.duration || '—'}
                                                         </span>
                                                     </div>
@@ -622,7 +628,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
     );
 };
 
-const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistClick }) => {
+const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlbum, onArtistClick }) => {
     const [selectedSide, setSelectedSide] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [elapsed, setElapsed] = useState(0);
@@ -727,46 +733,51 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
         }
     }, []);
 
-    // Fetch lyrics when current track changes
+    // Single consolidated lyrics effect — avoids the lyricsLoading-in-deps cycle
+    // that caused React to cleanup (mounted=false) before the fetch resolved.
+    const lyricsFetchingRef = useRef(false);
+
     useEffect(() => {
-        if (!currentTrackInfo?.track?.title || !details?.artist) return;
-        const trackTitle = currentTrackInfo.track.title;
-        const trackKey = `${details.artist}/${trackTitle}`;
+        const trackTitle = currentTrackInfo?.track?.title;
+        const artistName = details?.artist;
 
-        // Don't re-fetch for the same track
-        if (trackKey === lyricsTrack) return;
+        // Nothing to fetch
+        if (!trackTitle || !artistName) return;
 
+        const trackKey = `${artistName}/${trackTitle}`;
+
+        // If lyrics panel isn't visible, just keep track of which track we're on
+        if (!showLyrics) {
+            // If the track changed while lyrics were hidden, clear stale lyrics
+            if (trackKey !== lyricsTrack) {
+                setLyricsTrack(trackKey);
+                setLyrics('');
+            }
+            return;
+        }
+
+        // Lyrics panel is open — do we need to fetch?
+        // Skip if we already have lyrics for this track, or a fetch is in flight
+        if ((trackKey === lyricsTrack && lyrics) || lyricsFetchingRef.current) return;
+
+        // New track or no lyrics yet — fetch
+        lyricsFetchingRef.current = true;
         setLyricsTrack(trackKey);
-        if (!showLyrics) return; // Only fetch if lyrics panel is open
-
-        let mounted = true;
         setLyricsLoading(true);
         setLyrics('');
 
-        fetchLyricsWithFallback(details.artist, trackTitle).then(res => {
+        let mounted = true;
+        fetchLyricsWithFallback(artistName, trackTitle).then(result => {
             if (mounted) {
-                setLyrics(res);
+                setLyrics(result);
                 setLyricsLoading(false);
+                lyricsFetchingRef.current = false;
             }
         });
 
         return () => { mounted = false; };
-    }, [currentTrackInfo?.track?.title, details?.artist, showLyrics, fetchLyricsWithFallback]);
-
-    // Fetch lyrics when toggling lyrics on
-    useEffect(() => {
-        if (showLyrics && !lyrics && !lyricsLoading && currentTrackInfo?.track?.title && details?.artist) {
-            let mounted = true;
-            setLyricsLoading(true);
-            fetchLyricsWithFallback(details.artist, currentTrackInfo.track.title).then(res => {
-                if (mounted) {
-                    setLyrics(res);
-                    setLyricsLoading(false);
-                }
-            });
-            return () => { mounted = false; };
-        }
-    }, [showLyrics, lyrics, lyricsLoading, currentTrackInfo, details, fetchLyricsWithFallback]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showLyrics, currentTrackInfo?.track?.title, details?.artist, fetchLyricsWithFallback]);
 
     // Scroll lyrics to top when track changes
     useEffect(() => {
@@ -800,7 +811,23 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                             <ChevronDown size={24} />
                         </button>
                         <button
-                            onClick={onStop}
+                            onClick={() => {
+                                // Record the session if long enough
+                                if (elapsed >= 30 && details && selectedSide) {
+                                    onSessionEnd?.({
+                                        albumId: details.id,
+                                        albumTitle: details.title || 'Unknown',
+                                        artist: details.artist || 'Unknown',
+                                        genres: details.genres || [],
+                                        year: parseInt(details.year) || 0,
+                                        labels: details.label ? [details.label] : [],
+                                        side: selectedSide,
+                                        startTime: startTimeRef.current || new Date().toISOString(),
+                                        durationSeconds: elapsed,
+                                    });
+                                }
+                                onStop();
+                            }}
                             className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all hover:scale-105"
                             title="Stop Spinning"
                         >
@@ -1069,14 +1096,14 @@ const NowSpinningWidget = ({ details, trackData, onStop, onViewAlbum, onArtistCl
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 mb-0.5">
                                     <Volume2 size={10} className={`flex-shrink-0 ${isPlaying ? 'text-violet-400 animate-pulse' : 'text-gray-500'}`} />
-                                    <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-violet-400">
+                                    <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-violet-400">
                                         Now Spinning
                                     </span>
                                 </div>
                                 <p className="text-sm font-bold text-white truncate leading-tight">
                                     {details.title}
                                 </p>
-                                <p className="text-xs text-gray-400 truncate">
+                                <p className="text-sm sm:text-xs text-gray-400 truncate">
                                     {details.artist}
                                 </p>
                             </div>
@@ -1125,6 +1152,10 @@ export const SpinVinyl = () => {
     const [viewMode, setViewMode] = useState(() => localStorage.getItem('vinylView') || 'grid');
     const [sortBy, setSortBy] = useState(() => localStorage.getItem('vinylSort') || 'added-desc');
     const [showSortMenu, setShowSortMenu] = useState(false);
+
+    // ─── Gamification State ──────────────────────────────────────
+    const [activePage, setActivePage] = useState('collection'); // 'collection' | 'achievements' | 'stats'
+    const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
 
@@ -1238,6 +1269,20 @@ export const SpinVinyl = () => {
         localStorage.removeItem('nowSpinning');
     };
 
+    // ─── Gamification: record session + check badges ─────────────
+    const handleSessionEnd = useCallback((sessionData) => {
+        try {
+            const updatedStats = recordSession(sessionData);
+            const collectionMeta = { total: totalItems };
+            const newBadges = checkAndAwardBadges(updatedStats, collectionMeta);
+            if (newBadges.length > 0) {
+                setPendingBadges(prev => [...prev, ...newBadges]);
+            }
+        } catch (e) {
+            console.error('[SpinVinyl] Session recording error:', e);
+        }
+    }, [totalItems]);
+
     // ─── Filter & Sort ──────────────────────────────────────────
     const filteredAndSorted = useMemo(() => {
         let result = [...releases];
@@ -1333,7 +1378,19 @@ export const SpinVinyl = () => {
 
     // ─── Render Authenticated State ──────────────────────────────
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white">
+        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-20">
+            {/* ─── Page Router ──────────────────────────────── */}
+            {activePage === 'achievements' && (
+                <AchievementsPage collectionCount={totalItems} />
+            )}
+            {activePage === 'stats' && (
+                <StatsPage collectionCount={totalItems} />
+            )}
+            {activePage === 'releases' && (
+                <ReleasesPage releases={releases} />
+            )}
+            {/* Collection page (always rendered, hidden when other tab active) */}
+            <div className={activePage !== 'collection' ? 'hidden' : ''}>
             {/* Hero — compact on mobile */}
             <div className="relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)]" />
@@ -1351,7 +1408,7 @@ export const SpinVinyl = () => {
                             </div>
                             <div className="flex flex-col items-center sm:items-start max-w-[300px] sm:max-w-none">
                                 <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent leading-tight sm:leading-none">Spin Vinyl</h1>
-                                <p className="text-xs sm:text-sm text-violet-200 font-bold tracking-widest uppercase mt-2 sm:mt-1 leading-relaxed shadow-sm">The Ultimate Discogs® Listening Companion</p>
+                                <p className="text-sm sm:text-sm text-violet-200 font-bold tracking-widest uppercase mt-2 sm:mt-1 leading-relaxed shadow-sm">The Ultimate Discogs® Listening Companion</p>
                             </div>
                         </div>
 
@@ -1511,8 +1568,8 @@ export const SpinVinyl = () => {
                                                 {artist || 'Unknown'}
                                             </p>
                                             <div className="flex items-center gap-2 mt-1.5 relative z-10">
-                                                {info.year > 0 && <span className="text-[10px] text-gray-500 font-medium">{info.year}</span>}
-                                                {info.formats?.[0]?.name && <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-medium">{info.formats[0].name}</span>}
+                                                {info.year > 0 && <span className="text-xs sm:text-[10px] text-gray-500 font-medium">{info.year}</span>}
+                                                {info.formats?.[0]?.name && <span className="text-xs sm:text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-medium">{info.formats[0].name}</span>}
                                             </div>
                                         </div>
                                     </button>
@@ -1543,7 +1600,7 @@ export const SpinVinyl = () => {
                                                 <div className="min-w-0">
                                                     <p className={`text-sm font-medium truncate ${isSpinning ? 'text-violet-300' : 'text-white group-hover:text-violet-300'} transition-colors`} title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
                                                     <p
-                                                        className="text-xs text-gray-500 truncate sm:hidden mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                        className="text-sm sm:text-xs text-gray-500 truncate sm:hidden mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setSearchQuery(artist);
@@ -1583,6 +1640,7 @@ export const SpinVinyl = () => {
                 </div>
             </div>
 
+            </div>{/* end collection page wrapper */}
             {/* Disclaimer Footer */}
             <footer className="w-full py-8 mt-12 border-t border-white/5 px-6">
                 <div className="max-w-7xl mx-auto flex flex-col items-center gap-4 text-center">
@@ -1594,6 +1652,37 @@ export const SpinVinyl = () => {
                     </div>
                 </div>
             </footer>
+
+            {/* ─── Bottom Navigation ──────────────────────────── */}
+            <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-950/95 backdrop-blur-xl border-t border-white/10">
+                <div className="flex items-stretch max-w-lg mx-auto">
+                    {[
+                        { id: 'collection', label: 'Collection', icon: Disc },
+                        { id: 'releases', label: 'Explore', icon: Compass },
+                        { id: 'achievements', label: 'Badges', icon: Trophy },
+                        { id: 'stats', label: 'Stats', icon: BarChart2 },
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActivePage(tab.id)}
+                            className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-3 transition-all ${
+                                activePage === tab.id
+                                    ? 'text-violet-400'
+                                    : 'text-gray-500 hover:text-gray-300'
+                            }`}
+                        >
+                            {activePage === tab.id && (
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-violet-500 to-pink-500 rounded-full" />
+                            )}
+                            <tab.icon
+                                size={20}
+                                className={activePage === tab.id ? 'drop-shadow-[0_0_8px_rgba(167,139,250,0.7)]' : ''}
+                            />
+                            <span className="text-[10px] font-semibold tracking-wide">{tab.label}</span>
+                        </button>
+                    ))}
+                </div>
+            </nav>
 
             {/* Album Detail Modal */}
             {selectedAlbum && (
@@ -1614,6 +1703,7 @@ export const SpinVinyl = () => {
                 details={spinningDetails}
                 trackData={spinningTrackData}
                 onStop={stopSpinning}
+                onSessionEnd={handleSessionEnd}
                 onViewAlbum={() => {
                     if (spinningDetails && releases) {
                         const release = releases.find(r => r.id === spinningDetails.id);
@@ -1626,6 +1716,14 @@ export const SpinVinyl = () => {
                     window.scrollTo({ top: 0, behavior: 'smooth' }); // scroll to top to see search
                 }}
             />
+
+            {/* Badge Toast — shows queue one at a time */}
+            {pendingBadges.length > 0 && (
+                <BadgeToast
+                    badge={pendingBadges[0]}
+                    onDismiss={() => setPendingBadges(prev => prev.slice(1))}
+                />
+            )}
         </div>
     );
 };

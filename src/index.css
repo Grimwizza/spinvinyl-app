@@ -268,3 +268,23 @@ body {
     flex: 1 1 100% !important;
   }
 }
+
+/* ── Mobile Text Scaling ─────────────────────────────────────── */
+@media screen and (max-width: 639px) {
+  /* Slightly larger base font so relative sizes scale up */
+  html {
+    font-size: 17px;
+  }
+
+  /* Boost arbitrary tiny text sizes that Tailwind can't scale via relative units */
+  [class*="text-\\[10px\\]"],
+  [class*="text-\\[9px\\]"] {
+    font-size: 0.75rem !important; /* ~12-13px — matches text-xs */
+    line-height: 1.25rem !important;
+  }
+
+  [class*="text-\\[11px\\]"] {
+    font-size: 0.8rem !important;
+    line-height: 1.3rem !important;
+  }
+}
