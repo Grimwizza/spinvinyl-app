@@ -112,6 +112,153 @@ const matchesArtist = (raw, normalizedArtistSet) => {
     return null;
 };
 
+// ─── Upcoming Release Modal ───────────────────────────────────────
+const UpcomingReleaseModal = ({ release, enrichedData, onClose }) => {
+    const [bio, setBio] = useState(null);
+    const [loadingBio, setLoadingBio] = useState(true);
+    const [parsedInfo, setParsedInfo] = useState({ artist: '', title: release.title || release.raw, thumb: enrichedData?.thumb });
+
+    useEffect(() => {
+        const fetchInfo = async () => {
+            setLoadingBio(true);
+            try {
+                let finalArtist = release._matchedArtist || '';
+                let finalTitle = release.title || release.raw;
+                let coverArt = enrichedData?.thumb;
+
+                if (!release._matchedArtist) {
+                    const searchRes = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(release.title || release.raw)}`);
+                    if (searchRes.ok) {
+                        const data = await searchRes.json();
+                        const top = data.results?.[0];
+                        if (top) {
+                            if (!coverArt && (top.cover_image || top.thumb)) {
+                                coverArt = top.cover_image || top.thumb;
+                            }
+                            if (top.title && top.title.includes(' - ')) {
+                                const parts = top.title.split(' - ');
+                                finalArtist = parts[0].trim();
+                                finalTitle = parts.slice(1).join(' - ').trim();
+                            }
+                        }
+                    }
+                }
+
+                if (!finalArtist) {
+                    if (release.raw.includes(' - ')) {
+                        const parts = release.raw.split(' - ');
+                        finalArtist = parts[0].trim();
+                        finalTitle = parts.slice(1).join(' - ').trim();
+                    } else {
+                        finalArtist = 'Unknown Artist';
+                    }
+                }
+
+                setParsedInfo({ artist: finalArtist, title: finalTitle, thumb: coverArt });
+
+                if (finalArtist && finalArtist !== 'Unknown Artist') {
+                    const wikiName = finalArtist.replace(/ /g, '_');
+                    const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiName)}`);
+                    const wikiData = await wikiRes.json();
+                    if (wikiData.extract) {
+                        setBio({ text: wikiData.extract, url: wikiData.content_urls?.desktop?.page });
+                    } else {
+                        setBio(null);
+                    }
+                } else {
+                    setBio(null);
+                }
+            } catch {
+                setBio(null);
+            } finally {
+                setLoadingBio(false);
+            }
+        };
+
+        fetchInfo();
+    }, [release, enrichedData]);
+
+    const amazonUrl = `https://www.amazon.com/s?k=${encodeURIComponent(`${parsedInfo.artist} ${parsedInfo.title} vinyl`)}`;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex flex-col sm:items-center sm:justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
+            <div className="flex-1 sm:flex-none w-full max-w-lg bg-gray-900 sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl mt-12 sm:mt-0 relative">
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors"
+                >
+                    <span className="text-xl leading-none">&times;</span>
+                </button>
+
+                <div className="overflow-y-auto p-6 flex-1">
+                    <div className="flex flex-col items-center text-center">
+                        <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-gray-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
+                            {parsedInfo.thumb ? (
+                                <img src={parsedInfo.thumb} alt={parsedInfo.title} className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                    <Disc3 size={48} className="text-gray-600" />
+                                </div>
+                            )}
+                        </div>
+                        <h2 className="text-2xl font-bold text-white leading-tight">{parsedInfo.title}</h2>
+                        <p className="text-lg text-gray-400 mt-1">{parsedInfo.artist}</p>
+                        <div className="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
+                            <span>Upcoming Release</span>
+                            <span>·</span>
+                            <span className="text-violet-400 font-bold">{release.releaseDate}</span>
+                        </div>
+                    </div>
+
+                    <div className="mt-8">
+                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">About the Artist</h3>
+                        {loadingBio ? (
+                            <div className="space-y-2 animate-pulse">
+                                <div className="h-3 bg-white/5 rounded w-full" />
+                                <div className="h-3 bg-white/5 rounded w-5/6" />
+                                <div className="h-3 bg-white/5 rounded w-4/6" />
+                            </div>
+                        ) : bio ? (
+                            <div className="text-sm text-gray-400 leading-relaxed space-y-2">
+                                <p className="line-clamp-4">{bio.text}</p>
+                                {bio.url && (
+                                    <a href={bio.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 font-medium inline-flex items-center gap-1">
+                                        Read more on Wikipedia <ExternalLink size={12} />
+                                    </a>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-500 italic">No biography available.</p>
+                        )}
+                    </div>
+
+                    <div className="mt-8 space-y-3">
+                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Links</h3>
+                        <div className="grid grid-cols-2 gap-3 pb-8 sm:pb-0">
+                            <a
+                                href={release.searchUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
+                            >
+                                <Disc3 size={16} /> Search Discogs
+                            </a>
+                            <a
+                                href={amazonUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
+                            >
+                                <ExternalLink size={16} /> Search Amazon
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const [upcoming, setUpcoming] = useState([]);
     const [artistSet, setArtistSet] = useState(null);
@@ -122,6 +269,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const [enriching, setEnriching] = useState(false);
     const [error, setError] = useState(null);
     const [showAll, setShowAll] = useState(false);
+    const [selectedRelease, setSelectedRelease] = useState(null);
     const enrichAttempted = useRef(false);
 
     // ── Build artist/genre profile from the parent's full collection ──
@@ -241,49 +389,36 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         }
     }, [upcoming, artistSet, genrePrefs, collectionLoading, doEnrichment]);
 
-    // ── Three-way partition ────────────────────────────────────────────
-    const { forYou, mightLike, others } = useMemo(() => {
-        if (!artistSet) return { forYou: [], mightLike: [], others: upcoming };
-        const forYou = [];
-        const mightLike = [];
-        const rest = [];
-
-        upcoming.forEach(r => {
+    // ── Annotate upcoming releases ────────────────────────────────────
+    const annotatedUpcoming = useMemo(() => {
+        if (!artistSet || upcoming.length === 0) return upcoming;
+        
+        return upcoming.map(r => {
             const artistMatch = matchesArtist(r.raw, artistSet);
             if (artistMatch) {
-                const genres = artistGenres?.get(artistMatch)
-                    ? [...artistGenres.get(artistMatch)].slice(0, 4)
-                    : [];
-                forYou.push({ ...r, _matchedArtist: artistMatch, _genres: genres });
-                return;
+                const genres = artistGenres?.get(artistMatch) ? [...artistGenres.get(artistMatch)].slice(0, 4) : [];
+                return { ...r, isForYou: true, _matchedArtist: artistMatch, _genres: genres };
             }
-
             if (genrePrefs?.size > 0 && enriched[r.raw]?.genres) {
                 const matching = enriched[r.raw].genres.filter(g => genrePrefs.has(g));
                 if (matching.length > 0) {
-                    mightLike.push({ ...r, _genres: matching.slice(0, 3), _score: matching.length });
-                    return;
+                    return { ...r, isMightLike: true, _genres: matching.slice(0, 3), _score: matching.length };
                 }
             }
-
-            rest.push(r);
+            return r;
         });
-
-        mightLike.sort((a, b) => b._score - a._score);
-        return { forYou, mightLike, others: rest };
     }, [upcoming, artistSet, artistGenres, genrePrefs, enriched]);
 
-    const visibleOthers = showAll ? others : others.slice(0, 30);
-
-    const groupByDate = (items) => {
+    const groupedReleases = useMemo(() => {
         const groups = {};
-        items.forEach(r => {
+        const listToGroup = showAll ? annotatedUpcoming : annotatedUpcoming.slice(0, 30);
+        listToGroup.forEach(r => {
             const key = r.releaseDate || 'TBD';
             if (!groups[key]) groups[key] = [];
             groups[key].push(r);
         });
         return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
-    };
+    }, [annotatedUpcoming, showAll]);
 
     const formatDate = (isoDate) => {
         try {
@@ -294,13 +429,10 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     };
 
     const ReleaseRow = ({ release, isForYou, isMightLike }) => {
-        const searchUrl = `https://www.discogs.com/search/?q=${encodeURIComponent(release.title || release.raw)}&type=release&format=Vinyl`;
         return (
-            <a
-                href={searchUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group"
+            <button
+                onClick={() => setSelectedRelease(release)}
+                className="w-full text-left flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group"
             >
                 <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-white truncate leading-snug group-hover:text-violet-300 transition-colors">
@@ -317,17 +449,16 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     )}
                 </div>
                 {isForYou && (
-                    <span className="flex-shrink-0 text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded-full">
-                        ARTIST
+                    <span className="flex-shrink-0 text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded-md">
+                        ARTIST MATCH
                     </span>
                 )}
                 {isMightLike && (
-                    <span className="flex-shrink-0 text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                        GENRE
+                    <span className="flex-shrink-0 text-[10px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-md whitespace-nowrap">
+                        GENRE MATCH
                     </span>
                 )}
-                <ExternalLink size={11} className="flex-shrink-0 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </a>
+            </button>
         );
     };
 
@@ -369,6 +500,15 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 </div>
             )}
 
+            {/* Modal */}
+            {selectedRelease && (
+                <UpcomingReleaseModal 
+                    release={selectedRelease} 
+                    enrichedData={enriched[selectedRelease.raw]} 
+                    onClose={() => setSelectedRelease(null)} 
+                />
+            )}
+
             {/* Empty state */}
             {!loading && !error && upcoming.length === 0 && (
                 <div className="text-center py-12 text-gray-500 text-sm">
@@ -377,69 +517,37 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 </div>
             )}
 
-            {/* Artist matches */}
-            {!loading && forYou.length > 0 && (
-                <div className="mb-6">
-                    <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <span>★</span> Artist Matches ({forYou.length})
-                    </h3>
-                    <div className="space-y-0.5 rounded-2xl bg-violet-500/5 border border-violet-500/15 overflow-hidden p-1">
-                        {forYou.map((r, i) => (
-                            <ReleaseRow key={`foryou-${r.raw}-${i}`} release={r} isForYou />
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Genre matches — visible while enriching or once results arrive */}
-            {!loading && (mightLike.length > 0 || enriching) && genrePrefs?.size > 0 && (
-                <div className="mb-6">
-                    <h3 className="text-xs font-bold text-pink-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Music2 size={11} />
-                        Matches Your Taste
-                        {enriching && <Loader2 size={11} className="animate-spin ml-1" />}
-                        {mightLike.length > 0 && <span className="ml-0.5">({mightLike.length})</span>}
-                    </h3>
-                    {mightLike.length > 0 ? (
-                        <div className="space-y-0.5 rounded-2xl bg-pink-500/5 border border-pink-500/15 overflow-hidden p-1">
-                            {mightLike.map((r, i) => (
-                                <ReleaseRow key={`like-${r.raw}-${i}`} release={r} isMightLike />
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="text-xs text-gray-600 px-1">Searching for genre matches…</p>
-                    )}
-                </div>
-            )}
-
             {/* All upcoming grouped by date */}
-            {!loading && others.length > 0 && (
-                <div>
-                    {(forYou.length > 0 || mightLike.length > 0) && (
-                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                            All Upcoming
-                        </h3>
+            {!loading && annotatedUpcoming.length > 0 && (
+                <div className="mb-6">
+                    {/* Enriching indicator */}
+                    {!loading && enriching && genrePrefs?.size > 0 && (
+                        <p className="text-xs text-pink-400 mb-4 flex items-center gap-1.5">
+                            <Loader2 size={11} className="animate-spin" />
+                            Searching upcoming releases for genre matches...
+                        </p>
                     )}
-                    {groupByDate(visibleOthers).map(([date, items]) => (
+
+                    {groupedReleases.map(([date, items]) => (
                         <div key={date} className="mb-4">
                             <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 px-1">
                                 {formatDate(date)}
                             </p>
                             <div className="space-y-0.5 rounded-2xl bg-white/[0.02] border border-white/5 overflow-hidden p-1">
                                 {items.map((r, i) => (
-                                    <ReleaseRow key={`other-${r.raw}-${i}`} release={r} />
+                                    <ReleaseRow key={`${r.raw}-${i}`} release={r} isForYou={r.isForYou} isMightLike={r.isMightLike} />
                                 ))}
                             </div>
                         </div>
                     ))}
-                    {others.length > 30 && (
+                    {annotatedUpcoming.length > 30 && (
                         <button
                             onClick={() => setShowAll(s => !s)}
                             className="w-full mt-2 py-2 text-xs text-gray-500 hover:text-gray-300 flex items-center justify-center gap-1 transition-colors"
                         >
                             {showAll
                                 ? <><ChevronUp size={14} /> Show Less</>
-                                : <><ChevronDown size={14} /> Show {others.length - 30} More</>}
+                                : <><ChevronDown size={14} /> Show {annotatedUpcoming.length - 30} More</>}
                         </button>
                     )}
                 </div>
