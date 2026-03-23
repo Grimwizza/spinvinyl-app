@@ -258,8 +258,8 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 return;
             }
 
-            if (genrePrefs?.size > 0 && enriched[r.raw]) {
-                const matching = enriched[r.raw].filter(g => genrePrefs.has(g));
+            if (genrePrefs?.size > 0 && enriched[r.raw]?.genres) {
+                const matching = enriched[r.raw].genres.filter(g => genrePrefs.has(g));
                 if (matching.length > 0) {
                     mightLike.push({ ...r, _genres: matching.slice(0, 3), _score: matching.length });
                     return;
