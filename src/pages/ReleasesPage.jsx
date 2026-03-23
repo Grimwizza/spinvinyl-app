@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass } from 'lucide-react';
 
 // ─── Cache helpers ────────────────────────────────────────────────
@@ -112,86 +112,169 @@ const matchesArtist = (raw, normalizedArtistSet) => {
     return null;
 };
 
-const UpcomingReleasesSection = () => {
-    const [upcoming, setUpcoming] = useState([]);        // all releases from upcomingvinyl
-    const [artistSet, setArtistSet] = useState(null);    // normalized artist name Set from full collection
+const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
+    const [upcoming, setUpcoming] = useState([]);
+    const [artistSet, setArtistSet] = useState(null);
+    const [artistGenres, setArtistGenres] = useState(null);
+    const [genrePrefs, setGenrePrefs] = useState(null);
+    const [enriched, setEnriched] = useState({});
     const [loading, setLoading] = useState(false);
-    const [loadingCollection, setLoadingCollection] = useState(false);
+    const [enriching, setEnriching] = useState(false);
     const [error, setError] = useState(null);
     const [showAll, setShowAll] = useState(false);
+    const enrichAttempted = useRef(false);
 
-    // Load both the upcoming releases and the full collection in parallel
-    const fetchData = useCallback(async (force = false) => {
+    // ── Build artist/genre profile from the parent's full collection ──
+    useEffect(() => {
+        if (!collection?.length || collectionLoading) return;
+
+        const names = new Set();
+        const agMap = new Map();
+        const genreCount = new Map();
+
+        collection.forEach(r => {
+            const info = r.basic_information ?? {};
+            const genres = [...(info.genres ?? []), ...(info.styles ?? [])];
+            (info.artists ?? []).forEach(a => {
+                if (!a.name) return;
+                const norm = normalizeArtist(a.name);
+                names.add(norm);
+                if (!agMap.has(norm)) agMap.set(norm, new Set());
+                genres.forEach(g => agMap.get(norm).add(g));
+            });
+            genres.forEach(g => genreCount.set(g, (genreCount.get(g) ?? 0) + 1));
+        });
+
+        const topGenres = [...genreCount.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 20)
+            .map(([g]) => g);
+
+        setArtistSet(names);
+        setArtistGenres(agMap);
+        setGenrePrefs(new Set(topGenres));
+    }, [collection, collectionLoading]);
+
+    // ── Background enrichment: artwork + genres for all releases ─────────
+    // Enriches all upcoming releases (up to 30) for cover art; non-artist-
+    // matched ones also use genre data for the "Matches Your Taste" section.
+    const doEnrichment = useCallback(async (upcomingList, aSet, gPrefs) => {
+        const toEnrich = upcomingList.slice(0, 30);
+        if (toEnrich.length === 0) { setEnriching(false); return; }
+
+        const results = {};
+        for (const r of toEnrich) {
+            try {
+                const res = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(r.title || r.raw)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const top = data.results?.[0];
+                    if (top) {
+                        results[r.raw] = {
+                            genres: [...(top.genre ?? []), ...(top.style ?? [])],
+                            thumb: top.cover_image || top.thumb || null,
+                        };
+                    }
+                } else if (res.status === 401) {
+                    break;
+                }
+            } catch { /* skip */ }
+            await new Promise(resolve => setTimeout(resolve, 350));
+        }
+
+        setEnriched(results);
+        setEnriching(false);
+
+        // Persist enriched data in cache so subsequent loads skip re-enrichment
+        try {
+            const cacheRaw = localStorage.getItem(CACHE_KEYS.releases);
+            if (cacheRaw) {
+                const parsed = JSON.parse(cacheRaw);
+                parsed.data.enriched = results;
+                localStorage.setItem(CACHE_KEYS.releases, JSON.stringify(parsed));
+            }
+        } catch { /* ignore cache errors */ }
+    }, []);
+
+    // ── Fetch upcoming releases from upcomingvinyl.com (cached separately) ──
+    const fetchUpcoming = useCallback(async (force = false) => {
         if (!force) {
             const cached = readCache(CACHE_KEYS.releases);
-            if (cached?.upcoming && cached?.artistSet) {
+            if (cached?.upcoming) {
                 setUpcoming(cached.upcoming);
-                setArtistSet(new Set(cached.artistSet));
+                if (cached.enriched) setEnriched(cached.enriched);
                 return;
             }
         }
         clearCache(CACHE_KEYS.releases);
+        enrichAttempted.current = false;
         setLoading(true);
-        setLoadingCollection(true);
         setError(null);
-
+        setEnriched({});
         try {
-            // Fetch upcoming releases and FULL collection in parallel
-            const [upcomingRes, collectionRes] = await Promise.all([
-                fetch('/api/upcoming'),
-                fetch('/api/discogs?action=collectionAll'),
-            ]);
-
-            // --- Upcoming releases ---
-            const upcomingData = upcomingRes.ok ? await upcomingRes.json() : { releases: [] };
-            setUpcoming(upcomingData.releases || []);
-
-            // --- Full collection artist set ---
-            setLoadingCollection(false);
-            const collectionData = collectionRes.ok ? await collectionRes.json() : { releases: [] };
-            const allReleases = collectionData.releases || [];
-
-            const names = new Set();
-            allReleases.forEach(r => {
-                const info = r.basic_information || {};
-                (info.artists || []).forEach(a => {
-                    if (a.name) names.add(normalizeArtist(a.name));
-                });
-            });
-            setArtistSet(names);
-
-            // Cache the results
-            writeCache(CACHE_KEYS.releases, {
-                upcoming: upcomingData.releases || [],
-                artistSet: [...names],
-            });
-        } catch (e) {
+            const res = await fetch('/api/upcoming');
+            const data = res.ok ? await res.json() : { releases: [] };
+            const list = data.releases ?? [];
+            setUpcoming(list);
+            writeCache(CACHE_KEYS.releases, { upcoming: list });
+        } catch {
             setError('Failed to load upcoming releases. Try refreshing.');
-            console.error('[UpcomingReleases]', e);
         } finally {
             setLoading(false);
-            setLoadingCollection(false);
         }
     }, []);
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+    useEffect(() => { fetchUpcoming(); }, [fetchUpcoming]);
 
-    // Partition into "For You" matches and everything else
-    const { forYou, others } = useMemo(() => {
-        if (!artistSet) return { forYou: [], others: upcoming };
+    // ── Trigger enrichment once upcoming + genre prefs are both ready ──
+    useEffect(() => {
+        if (
+            !enrichAttempted.current &&
+            upcoming.length > 0 &&
+            artistSet &&
+            genrePrefs?.size > 0 &&
+            !collectionLoading
+        ) {
+            enrichAttempted.current = true;
+            setEnriching(true);
+            doEnrichment(upcoming, artistSet, genrePrefs);
+        }
+    }, [upcoming, artistSet, genrePrefs, collectionLoading, doEnrichment]);
+
+    // ── Three-way partition ────────────────────────────────────────────
+    const { forYou, mightLike, others } = useMemo(() => {
+        if (!artistSet) return { forYou: [], mightLike: [], others: upcoming };
         const forYou = [];
-        const others = [];
+        const mightLike = [];
+        const rest = [];
+
         upcoming.forEach(r => {
-            const match = matchesArtist(r.raw, artistSet);
-            if (match) forYou.push({ ...r, _matchedArtist: match });
-            else others.push(r);
+            const artistMatch = matchesArtist(r.raw, artistSet);
+            if (artistMatch) {
+                const genres = artistGenres?.get(artistMatch)
+                    ? [...artistGenres.get(artistMatch)].slice(0, 4)
+                    : [];
+                forYou.push({ ...r, _matchedArtist: artistMatch, _genres: genres });
+                return;
+            }
+
+            if (genrePrefs?.size > 0 && enriched[r.raw]) {
+                const matching = enriched[r.raw].filter(g => genrePrefs.has(g));
+                if (matching.length > 0) {
+                    mightLike.push({ ...r, _genres: matching.slice(0, 3), _score: matching.length });
+                    return;
+                }
+            }
+
+            rest.push(r);
         });
-        return { forYou, others };
-    }, [upcoming, artistSet]);
+
+        mightLike.sort((a, b) => b._score - a._score);
+        return { forYou, mightLike, others: rest };
+    }, [upcoming, artistSet, artistGenres, genrePrefs, enriched]);
 
     const visibleOthers = showAll ? others : others.slice(0, 30);
 
-    // Group releases by date for display
     const groupByDate = (items) => {
         const groups = {};
         items.forEach(r => {
@@ -210,7 +293,7 @@ const UpcomingReleasesSection = () => {
         } catch { return isoDate; }
     };
 
-    const ReleaseRow = ({ release, isForYou }) => {
+    const ReleaseRow = ({ release, isForYou, isMightLike }) => {
         const searchUrl = `https://www.discogs.com/search/?q=${encodeURIComponent(release.title || release.raw)}&type=release&format=Vinyl`;
         return (
             <a
@@ -223,10 +306,24 @@ const UpcomingReleasesSection = () => {
                     <p className="text-xs font-semibold text-white truncate leading-snug group-hover:text-violet-300 transition-colors">
                         {release.raw}
                     </p>
+                    {release._genres?.length > 0 && (
+                        <div className="flex gap-1 mt-0.5 flex-wrap">
+                            {release._genres.map(g => (
+                                <span key={g} className="text-[9px] text-gray-500 bg-white/5 px-1 py-0.5 rounded">
+                                    {g}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
                 {isForYou && (
                     <span className="flex-shrink-0 text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 px-1.5 py-0.5 rounded-full">
-                        FOR YOU
+                        ARTIST
+                    </span>
+                )}
+                {isMightLike && (
+                    <span className="flex-shrink-0 text-[9px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                        GENRE
                     </span>
                 )}
                 <ExternalLink size={11} className="flex-shrink-0 text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -242,11 +339,11 @@ const UpcomingReleasesSection = () => {
                     <h2 className="text-base font-bold text-white">Upcoming Vinyl Releases</h2>
                     <p className="text-xs text-gray-500 mt-0.5">
                         From upcomingvinyl.com · personalized to your collection
-                        {loadingCollection && <span className="ml-2 text-violet-400">Loading your collection…</span>}
+                        {collectionLoading && <span className="ml-2 text-violet-400">Loading your collection…</span>}
                     </p>
                 </div>
                 <button
-                    onClick={() => fetchData(true)}
+                    onClick={() => fetchUpcoming(true)}
                     disabled={loading}
                     className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
                     title="Refresh"
@@ -280,11 +377,11 @@ const UpcomingReleasesSection = () => {
                 </div>
             )}
 
-            {/* For You — only shown when we have artist matches */}
+            {/* Artist matches */}
             {!loading && forYou.length > 0 && (
                 <div className="mb-6">
                     <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <span>★</span> For You ({forYou.length})
+                        <span>★</span> Artist Matches ({forYou.length})
                     </h3>
                     <div className="space-y-0.5 rounded-2xl bg-violet-500/5 border border-violet-500/15 overflow-hidden p-1">
                         {forYou.map((r, i) => (
@@ -294,10 +391,31 @@ const UpcomingReleasesSection = () => {
                 </div>
             )}
 
+            {/* Genre matches — visible while enriching or once results arrive */}
+            {!loading && (mightLike.length > 0 || enriching) && genrePrefs?.size > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-xs font-bold text-pink-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <Music2 size={11} />
+                        Matches Your Taste
+                        {enriching && <Loader2 size={11} className="animate-spin ml-1" />}
+                        {mightLike.length > 0 && <span className="ml-0.5">({mightLike.length})</span>}
+                    </h3>
+                    {mightLike.length > 0 ? (
+                        <div className="space-y-0.5 rounded-2xl bg-pink-500/5 border border-pink-500/15 overflow-hidden p-1">
+                            {mightLike.map((r, i) => (
+                                <ReleaseRow key={`like-${r.raw}-${i}`} release={r} isMightLike />
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-gray-600 px-1">Searching for genre matches…</p>
+                    )}
+                </div>
+            )}
+
             {/* All upcoming grouped by date */}
             {!loading && others.length > 0 && (
                 <div>
-                    {forYou.length > 0 && (
+                    {(forYou.length > 0 || mightLike.length > 0) && (
                         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
                             All Upcoming
                         </h3>
@@ -1044,7 +1162,7 @@ const TABS = [
     { id: 'wantlist', label: 'Wantlist', icon: Bookmark },
 ];
 
-const ReleasesPage = ({ releases = [] }) => {
+const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
     const [activeTab, setActiveTab] = useState('newReleases');
 
     // Extract unique artists + their counts from the user's collection
@@ -1139,7 +1257,7 @@ const ReleasesPage = ({ releases = [] }) => {
             {/* Content */}
             <div className="max-w-3xl mx-auto px-4 pt-5">
                 {activeTab === 'newReleases' && (
-                    <UpcomingReleasesSection />
+                    <UpcomingReleasesSection collection={releases} collectionLoading={collectionLoading} />
                 )}
                 {activeTab === 'vinylNews' && (
                     <VinylNewsSection ownedArtistNames={ownedArtistNames} ownedGenres={ownedGenres} />

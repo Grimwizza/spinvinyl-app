@@ -170,6 +170,39 @@ const SORT_OPTIONS = [
     { value: 'label-asc', label: 'Label A→Z', icon: Tag, field: 'label', order: 'asc', apiSort: 'artist', apiOrder: 'asc' },
 ];
 
+// ─── Collection Cache ────────────────────────────────────────────
+// Canonical collection is always cached in added_desc order.
+// All display sorting is done client-side via filteredAndSorted.
+const COLLECTION_CACHE_KEY = 'sv_collection_cache';
+const COLLECTION_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+const readCollectionCache = () => {
+    try {
+        const raw = localStorage.getItem(COLLECTION_CACHE_KEY);
+        if (!raw) return null;
+        const cache = JSON.parse(raw);
+        if (Date.now() - new Date(cache.cachedAt).getTime() > COLLECTION_CACHE_TTL) return null;
+        return cache; // { releases, total, newestInstanceId, cachedAt }
+    } catch { return null; }
+};
+
+const writeCollectionCache = (releases) => {
+    try {
+        localStorage.setItem(COLLECTION_CACHE_KEY, JSON.stringify({
+            releases,
+            total: releases.length,
+            newestInstanceId: releases[0]?.instance_id ?? null,
+            cachedAt: new Date().toISOString(),
+        }));
+    } catch (e) {
+        console.warn('[Collection Cache] Write failed:', e);
+    }
+};
+
+const clearCollectionCache = () => {
+    try { localStorage.removeItem(COLLECTION_CACHE_KEY); } catch { }
+};
+
 // ─── Helpers ────────────────────────────────────────────────────
 const parseDuration = (dur) => {
     if (!dur || typeof dur !== 'string') return 0;
@@ -1185,43 +1218,120 @@ export const SpinVinyl = () => {
     }, []);
 
     // ─── Fetch ALL pages of the collection ─────────────────────
-    const fetchCollection = useCallback(async (sort = currentSort) => {
+    // Always fetches in added_desc order (canonical cache order).
+    // Display sort is handled entirely client-side in filteredAndSorted.
+    const fetchCollection = useCallback(async (force = false) => {
         if (!isAuthenticated) return;
 
+        // ── Cache path ──────────────────────────────────────────
+        if (!force) {
+            const cached = readCollectionCache();
+            if (cached?.releases?.length) {
+                setReleases(cached.releases);
+                setTotalItems(cached.total);
+                setLoading(false);
+                setLoadingProgress('');
+
+                // Background incremental check: fetch page 1 to see if new items were added
+                try {
+                    const checkRes = await fetch(
+                        `/api/discogs?action=collection&page=1&per_page=100&sort=added&sort_order=desc`
+                    );
+                    if (checkRes.status === 401) { setIsAuthenticated(false); return; }
+                    if (!checkRes.ok) return; // network hiccup — keep using cache
+
+                    const checkData = await checkRes.json();
+                    const liveTotal = checkData.pagination?.items ?? 0;
+                    const firstPage = checkData.releases ?? [];
+
+                    // No change at all
+                    if (liveTotal === cached.total && firstPage[0]?.instance_id === cached.newestInstanceId) return;
+
+                    // Items were deleted or major reorganisation → full re-fetch
+                    if (liveTotal < cached.total || liveTotal - cached.total > 50) {
+                        // Fall through to full re-fetch below by clearing cache and re-calling
+                        clearCollectionCache();
+                        fetchCollection(true);
+                        return;
+                    }
+
+                    // New items added (up to 50 new) — collect them page by page until overlap
+                    const cachedIds = new Set(cached.releases.map(r => r.instance_id));
+                    const newItems = [];
+                    let allFirstPageNew = true;
+
+                    for (const item of firstPage) {
+                        if (cachedIds.has(item.instance_id)) { allFirstPageNew = false; break; }
+                        newItems.push(item);
+                    }
+
+                    // If we need more pages to find the overlap
+                    if (allFirstPageNew && newItems.length === firstPage.length) {
+                        const totalPages = checkData.pagination?.pages ?? 1;
+                        for (let p = 2; p <= Math.min(totalPages, 5); p++) {
+                            const r = await fetch(
+                                `/api/discogs?action=collection&page=${p}&per_page=100&sort=added&sort_order=desc`
+                            );
+                            if (!r.ok) break;
+                            const d = await r.json();
+                            let found = false;
+                            for (const item of d.releases ?? []) {
+                                if (cachedIds.has(item.instance_id)) { found = true; break; }
+                                newItems.push(item);
+                            }
+                            if (found) break;
+                        }
+                    }
+
+                    if (newItems.length > 0) {
+                        const merged = [...newItems, ...cached.releases];
+                        setReleases(merged);
+                        setTotalItems(merged.length);
+                        writeCollectionCache(merged);
+                    }
+                } catch { /* network error — cache remains valid */ }
+                return;
+            }
+        }
+
+        // ── Full re-fetch ───────────────────────────────────────
         setLoading(true);
         setError(null);
         setLoadingProgress('Loading page 1…');
+        clearCollectionCache();
         try {
-            // Fetch first page to get total pages
-            const res1 = await fetch(`/api/discogs?action=collection&page=1&per_page=100&sort=${sort.apiSort}&sort_order=${sort.apiOrder}`);
+            const res1 = await fetch(
+                `/api/discogs?action=collection&page=1&per_page=100&sort=added&sort_order=desc`
+            );
             if (res1.status === 401) {
                 setIsAuthenticated(false);
                 throw new Error('Session expired. Please log in again.');
             }
             if (!res1.ok) throw new Error(`API error: ${res1.status}`);
             const data1 = await res1.json();
-            const pages = data1.pagination?.pages || 1;
-            const total = data1.pagination?.items || 0;
-            let allReleases = [...(data1.releases || [])];
-
+            const pages = data1.pagination?.pages ?? 1;
+            const total = data1.pagination?.items ?? 0;
+            let allReleases = [...(data1.releases ?? [])];
             setTotalItems(total);
 
-            // Fetch remaining pages
             for (let p = 2; p <= pages; p++) {
                 setLoadingProgress(`Loading page ${p} of ${pages}…`);
-                const res = await fetch(`/api/discogs?action=collection&page=${p}&per_page=100&sort=${sort.apiSort}&sort_order=${sort.apiOrder}`);
+                const res = await fetch(
+                    `/api/discogs?action=collection&page=${p}&per_page=100&sort=added&sort_order=desc`
+                );
                 if (!res.ok) throw new Error(`API error on page ${p}: ${res.status}`);
                 const data = await res.json();
-                allReleases = [...allReleases, ...(data.releases || [])];
+                allReleases = [...allReleases, ...(data.releases ?? [])];
             }
 
             setReleases(allReleases);
             setTotalItems(allReleases.length);
+            writeCollectionCache(allReleases);
         } catch (err) {
             console.error('Failed to fetch collection:', err);
             setError(err.message);
         } finally { setLoading(false); setLoadingProgress(''); }
-    }, [isAuthenticated, currentSort]); // Added dependencies
+    }, [isAuthenticated]);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -1319,9 +1429,8 @@ export const SpinVinyl = () => {
     const handleSortChange = (option) => {
         setSortBy(option.value);
         setShowSortMenu(false);
-        if (option.apiSort !== currentSort.apiSort || option.apiOrder !== currentSort.apiOrder) {
-            fetchCollection(option);
-        }
+        // No re-fetch needed — collection is always cached in added_desc order;
+        // all display sorting is client-side in filteredAndSorted.
     };
 
     // ─── Render Unauthenticated State (Login Page) ──────────────
@@ -1387,7 +1496,7 @@ export const SpinVinyl = () => {
                 <StatsPage collectionCount={totalItems} />
             )}
             {activePage === 'releases' && (
-                <ReleasesPage releases={releases} />
+                <ReleasesPage releases={releases} collectionLoading={loading} />
             )}
             {/* Collection page (always rendered, hidden when other tab active) */}
             <div className={activePage !== 'collection' ? 'hidden' : ''}>
@@ -1424,6 +1533,7 @@ export const SpinVinyl = () => {
                                 <button
                                     onClick={async () => {
                                         await fetch('/api/discogs?action=logout');
+                                        clearCollectionCache();
                                         setIsAuthenticated(false);
                                         setReleases([]);
                                         setTotalItems(0);

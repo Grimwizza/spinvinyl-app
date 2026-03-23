@@ -285,6 +285,13 @@ export default async function handler(req, res) {
             apiUrl = `${DISCOGS_BASE}/database/search?artist=${encodeURIComponent(artistName)}&type=release&format=Vinyl&sort=year&sort_order=desc&per_page=5`;
             break;
         }
+        case 'searchRelease': {
+            // Search Discogs by query string — used for genre enrichment of upcoming releases
+            const q = url.searchParams.get('q') || req.query?.q || '';
+            if (!q) return res.status(400).json({ error: 'Missing query' });
+            apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(q)}&type=release&format=Vinyl&per_page=3`;
+            break;
+        }
         case 'addToWantlist': {
             // Add a release to the user’s Discogs Wantlist
             if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
