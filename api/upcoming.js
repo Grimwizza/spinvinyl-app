@@ -93,25 +93,30 @@ export default async function handler(req, res) {
                 return; // continue
             }
 
-            // Detect list items or paragraphs that contain release entries
-            if (currentDate && ['li', 'p'].includes(tag)) {
-                // Skip if the text looks like another date line
-                if (/^[A-Z][a-z]+ \d+,\s*\d{4}/.test(text)) return;
-                // Skip navigation and UI elements
-                if (text.length < 3 || text.length > 400) return;
-
-                // Some pages use "+" as a separator for multiple releases on one line
-                const parts = text.split(/\s*\+\s*/);
-                for (const part of parts) {
-                    const entry = parseEntry(part);
-                    if (entry && entry.raw.length > 2) {
-                        releases.push({
-                            ...entry,
-                            releaseDate: currentDate,
-                            dayOfWeek: currentDayOfWeek || '',
-                            searchUrl: `https://www.discogs.com/search/?q=${encodeURIComponent(entry.title)}&type=release&format=Vinyl`,
-                        });
-                    }
+            // Detect list items that contain a release link and artwork
+            if (currentDate && tag === 'li') {
+                const $a = $el.find('a').first();
+                const link = $a.attr('href');
+                if (!link || !link.includes('/record/')) return;
+                
+                const $img = $a.find('img');
+                const thumb = $img.attr('data-src') || $img.attr('src');
+                
+                const $h2 = $a.find('h2');
+                const titleSpan = $h2.find('span').text().replace(/\s+/g, ' ').trim();
+                const artist = $h2.clone().children().remove().end().text().replace(/\s+/g, ' ').trim();
+                
+                if (artist && titleSpan && artist.length > 1) {
+                    const cleanTitle = stripVariantSuffix(titleSpan);
+                    releases.push({
+                        artist,
+                        title: cleanTitle,
+                        raw: `${artist} - ${titleSpan}`,
+                        thumb,
+                        releaseDate: currentDate,
+                        dayOfWeek: currentDayOfWeek || '',
+                        searchUrl: `https://www.discogs.com/search/?q=${encodeURIComponent(artist + ' ' + cleanTitle)}&type=release&format=Vinyl`
+                    });
                 }
             }
         });

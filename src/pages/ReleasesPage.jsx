@@ -116,7 +116,7 @@ const matchesArtist = (raw, normalizedArtistSet) => {
 const UpcomingReleaseModal = ({ release, enrichedData, onClose }) => {
     const [bio, setBio] = useState(null);
     const [loadingBio, setLoadingBio] = useState(true);
-    const [parsedInfo, setParsedInfo] = useState({ artist: '', title: release.title || release.raw, thumb: enrichedData?.thumb });
+    const [parsedInfo, setParsedInfo] = useState({ artist: '', title: release.title || release.raw, thumb: enrichedData?.thumb || release.thumb });
 
     useEffect(() => {
         const fetchInfo = async () => {
@@ -124,7 +124,7 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose }) => {
             try {
                 let finalArtist = release._matchedArtist || '';
                 let finalTitle = release.title || release.raw;
-                let coverArt = enrichedData?.thumb;
+                let coverArt = enrichedData?.thumb || release.thumb;
 
                 if (!release._matchedArtist) {
                     const searchRes = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(release.title || release.raw)}`);
@@ -434,6 +434,13 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 onClick={() => setSelectedRelease(release)}
                 className="w-full text-left flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group"
             >
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded shadow flex-shrink-0 overflow-hidden bg-white/5 flex items-center justify-center border border-white/10">
+                    {release.thumb ? (
+                        <img src={release.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                        <Disc3 size={16} className="text-gray-600" />
+                    )}
+                </div>
                 <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-white truncate leading-snug group-hover:text-violet-300 transition-colors">
                         {release.raw}
