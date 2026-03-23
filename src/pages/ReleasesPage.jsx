@@ -947,7 +947,7 @@ const WantlistSection = () => {
         e.stopPropagation(); // prevent modal opening
         setRemoveState(prev => ({ ...prev, [releaseId]: 'pending' }));
         try {
-            const res = await fetch(`/api/discogs?action=removeFromWantlist&id=${releaseId}`, { method: 'DELETE' });
+            const res = await fetch(`/api/discogs?action=removeFromWantlist&id=${releaseId}`, { method: 'POST' });
             if (res.ok || res.status === 204 || res.status === 200) {
                 // success, remove from list and cache
                 const updated = wants.filter(w => String(w.id) !== String(releaseId));
@@ -1616,6 +1616,11 @@ const TABS = [
 const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
     const [activeTab, setActiveTab] = useState('vinylNews');
 
+    const switchTab = (id) => {
+        setActiveTab(id);
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    };
+
     // Extract unique artists + their counts from the user's collection
     const collectionArtists = useMemo(() => {
         const map = {};
@@ -1677,7 +1682,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
                     {TABS.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => switchTab(tab.id)}
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${
                                 activeTab === tab.id
                                     ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
