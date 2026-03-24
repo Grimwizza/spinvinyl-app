@@ -4,6 +4,8 @@ import lyricsHandler from './api/lyrics.js';
 import releasesHandler from './api/releases.js';
 import upcomingHandler from './api/upcoming.js';
 import upcomingDetailHandler from './api/upcoming-detail.js';
+import shopsHandler from './api/shops.js';
+import searchShopsHandler from './api/search-shops.js';
 
 // Helper to mock Vercel/Express 'res' object for Serverless Functions
 const mockResponse = (resolve, res) => {
@@ -26,8 +28,16 @@ const mockResponse = (resolve, res) => {
             resolve();
             return mock;
         },
+        end: () => {
+            res.statusCode = mock.statusCode;
+            Object.entries(mock.headers).forEach(([k, v]) => res.setHeader(k, v));
+            res.end();
+            resolve();
+            return mock;
+        },
         send: (data) => {
             res.statusCode = mock.statusCode;
+            Object.entries(mock.headers).forEach(([k, v]) => res.setHeader(k, v));
             res.end(data);
             resolve();
             return mock;
@@ -86,6 +96,16 @@ export const apiMiddleware = () => ({
                     if (discogsConsumerSecretMatch && discogsConsumerSecretMatch[1]) {
                         process.env.DISCOGS_CONSUMER_SECRET = discogsConsumerSecretMatch[1].replace(/["']/g, '').trim();
                         console.log('[API Proxy] Reloaded DISCOGS_CONSUMER_SECRET from .env');
+                    }
+
+                    const googlePlacesKeyMatch = envConfig.match(/^GOOGLE_PLACES_API_KEY=(.*)$/m);
+                    if (googlePlacesKeyMatch && googlePlacesKeyMatch[1]) {
+                        process.env.GOOGLE_PLACES_API_KEY = googlePlacesKeyMatch[1].replace(/["']/g, '').trim();
+                    }
+
+                    const braveSearchKeyMatch = envConfig.match(/^BRAVE_SEARCH_API_KEY=(.*)$/m);
+                    if (braveSearchKeyMatch && braveSearchKeyMatch[1]) {
+                        process.env.BRAVE_SEARCH_API_KEY = braveSearchKeyMatch[1].replace(/["']/g, '').trim();
                     }
                 }
             } catch (e) {
@@ -193,6 +213,50 @@ export const apiMiddleware = () => ({
                         req.query = { url: urlParams.get('url') };
                         try {
                             await upcomingDetailHandler(req, mockedRes);
+                        } catch (handlerErr) {
+                            reject(handlerErr);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/shops (Google Places record store finder) ---
+            if (url === '/shops') {
+                try {
+                    await new Promise(async (resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        try {
+                            await shopsHandler(req, mockedRes);
+                        } catch (handlerErr) {
+                            reject(handlerErr);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/search-shops (Brave Search / Gemini augmented search) ---
+            if (url === '/search-shops') {
+                try {
+                    await new Promise(async (resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        try {
+                            await searchShopsHandler(req, mockedRes);
                         } catch (handlerErr) {
                             reject(handlerErr);
                         }

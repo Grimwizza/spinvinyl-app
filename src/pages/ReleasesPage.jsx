@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map } from 'lucide-react';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { getStoredStats } from '../lib/statsEngine.js';
+import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import 'react-leaflet-cluster/lib/assets/MarkerCluster.css';
+import 'react-leaflet-cluster/lib/assets/MarkerCluster.Default.css';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -1687,6 +1693,571 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
     );
 };
 
+// ─── Shop Local ───────────────────────────────────────────────────
+
+const SHOP_FAVORITES_KEY = 'spinvinyl_shop_favorites';
+const loadShopFavorites = () => {
+    try { return new Set(JSON.parse(localStorage.getItem(SHOP_FAVORITES_KEY) || '[]')); }
+    catch { return new Set(); }
+};
+const saveShopFavorites = (set) => {
+    try { localStorage.setItem(SHOP_FAVORITES_KEY, JSON.stringify([...set])); } catch {}
+};
+
+const RADIUS_OPTIONS = [
+    { label: '5 mi', value: 5 },
+    { label: '10 mi', value: 10 },
+    { label: '25 mi', value: 25 },
+    { label: '50+ mi', value: 50 },
+];
+
+// Normalize an Overpass API element into a flat shop object
+const normalizeOSMShop = (el) => {
+    const t = el.tags || {};
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
+    const city = [t['addr:city'], t['addr:state'], t['addr:postcode']].filter(Boolean).join(', ');
+    const address = [street, city].filter(Boolean).join(', ');
+    return {
+        id: `${el.type}/${el.id}`,
+        osmType: el.type,
+        osmId: el.id,
+        name: t.name || 'Record Store',
+        lat,
+        lon,
+        address,
+        phone: t.phone || t['contact:phone'] || null,
+        website: t.website || t['contact:website'] || t.url || null,
+        email: t.email || t['contact:email'] || null,
+        hours: t.opening_hours || null,
+        description: t.description || null,
+    };
+};
+
+// Leaflet custom marker icons (created lazily to avoid SSR issues)
+const createShopIcon = (highlighted = false) => {
+    const size = highlighted ? 36 : 30;
+    const bg = highlighted ? '#8b5cf6' : '#7c3aed';
+    const shadow = highlighted ? '0 0 15px rgba(124,58,237,0.5)' : '0 2px 10px rgba(0,0,0,0.6)';
+    return L.divIcon({
+        html: `<div style="width:${size}px;height:${size}px;background:${bg};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:${shadow};transition:all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)"><svg width="${size * 0.4}" height="${size * 0.4}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>`,
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+        popupAnchor: [0, -(size / 2 + 6)],
+    });
+};
+
+const createUserLocationIcon = () => L.divIcon({
+    html: `<div style="width:20px;height:20px;background:#7c3aed;border:3px solid white;border-radius:50%;box-shadow:0 0 12px rgba(124,58,237,0.4), inset 0 0 4px rgba(0,0,0,0.2)"></div>`,
+    className: '',
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+});
+
+// Fits map bounds to all shops when the shop list changes
+const MapBoundsController = ({ shops }) => {
+    const map = useMap();
+    const prevLen = useRef(0);
+    useEffect(() => {
+        if (shops.length > 0 && shops.length !== prevLen.current) {
+            prevLen.current = shops.length;
+            const valid = shops.filter(s => s.lat && s.lon);
+            if (valid.length > 0) {
+                map.fitBounds(valid.map(s => [s.lat, s.lon]), { padding: [32, 32], maxZoom: 13, animate: true });
+            }
+        }
+    }, [shops]);
+    return null;
+};
+
+// Flies the map to a specific shop when it's selected from the list
+const MapPanController = ({ shop }) => {
+    const map = useMap();
+    const prevId = useRef(null);
+    useEffect(() => {
+        if (shop?.lat && shop?.lon && shop.id !== prevId.current) {
+            prevId.current = shop.id;
+            map.flyTo([shop.lat, shop.lon], Math.max(map.getZoom(), 15), { duration: 0.5 });
+        }
+    }, [shop?.id]);
+    return null;
+};
+
+const ShopPlaceholder = ({ large }) => (
+    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+        <Store size={large ? 48 : 28} className="text-gray-600" />
+    </div>
+);
+
+const ShopDetailModal = ({ shop, onClose, favorites, onToggleFavorite }) => {
+    const isFav = favorites.has(shop.id);
+    const { name, address, phone, website, email, hours, description, osmType, osmId } = shop;
+    const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address || name)}`;
+    const appleMapsUrl = `https://maps.apple.com/?q=${encodeURIComponent(address || name)}`;
+    const osmUrl = `https://www.openstreetmap.org/${osmType}/${osmId}`;
+    const discogsUrl = `https://www.discogs.com/search/?q=${encodeURIComponent(name)}&type=user`;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[90dvh]">
+                <button onClick={onClose} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors">
+                    <span className="text-xl leading-none">&times;</span>
+                </button>
+                <button
+                    onClick={() => onToggleFavorite(shop.id)}
+                    className={`absolute top-4 right-14 z-10 w-8 h-8 rounded-full backdrop-blur border flex items-center justify-center transition-all ${isFav ? 'bg-rose-500/30 border-rose-500/50 text-rose-400' : 'bg-black/40 border-white/20 text-gray-300 hover:text-rose-400'}`}
+                    title={isFav ? 'Remove from favorites' : 'Save as favorite'}
+                >
+                    <Heart size={14} className={isFav ? 'fill-rose-400' : ''} />
+                </button>
+
+                {/* Header */}
+                <div className="h-36 flex-shrink-0 relative overflow-hidden bg-gray-800">
+                    <ShopPlaceholder large />
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent" />
+                    <div className="absolute bottom-4 left-5 right-14">
+                        <h2 className="text-xl font-bold text-white leading-tight">{name}</h2>
+                    </div>
+                </div>
+
+                <div className="overflow-y-auto flex-1 min-h-0 p-5 space-y-5 pb-10">
+                    {description && <p className="text-sm text-gray-400 leading-relaxed">{description}</p>}
+
+                    <div className="space-y-3.5">
+                        {address && (
+                            <div className="flex items-start gap-3">
+                                <MapPin size={16} className="text-violet-400 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-gray-300 leading-snug">{address}</p>
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                        <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-400 hover:text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-lg transition-colors">
+                                            <ExternalLink size={10} /> Google Maps
+                                        </a>
+                                        <a href={appleMapsUrl} target="_blank" rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-gray-200 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg transition-colors">
+                                            <ExternalLink size={10} /> Apple Maps
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {phone && (
+                            <div className="flex items-center gap-3">
+                                <Phone size={16} className="text-violet-400 flex-shrink-0" />
+                                <a href={`tel:${phone.replace(/\D/g, '')}`} className="text-sm text-gray-300 hover:text-violet-300 transition-colors">{phone}</a>
+                            </div>
+                        )}
+                        {email && (
+                            <div className="flex items-center gap-3">
+                                <Globe size={16} className="text-violet-400 flex-shrink-0" />
+                                <a href={`mailto:${email}`} className="text-sm text-gray-300 hover:text-violet-300 truncate transition-colors">{email}</a>
+                            </div>
+                        )}
+                        {website && (
+                            <div className="flex items-center gap-3">
+                                <Globe size={16} className="text-violet-400 flex-shrink-0" />
+                                <a href={website} target="_blank" rel="noopener noreferrer"
+                                    className="text-sm text-gray-300 hover:text-violet-300 truncate transition-colors">
+                                    {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+                                </a>
+                            </div>
+                        )}
+                    </div>
+
+                    {hours && (
+                        <div>
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Hours</h3>
+                            <p className="text-xs text-gray-400 leading-relaxed">{hours}</p>
+                        </div>
+                    )}
+
+                    <div className={`grid gap-2 ${website ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                        {osmType && osmId && (
+                            <a href={osmUrl} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
+                                <Map size={13} /> OpenStreetMap
+                            </a>
+                        )}
+                        <a href={discogsUrl} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
+                            <Disc3 size={13} /> Discogs
+                        </a>
+                        {website && (
+                            <a href={website} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-violet-200 border border-violet-500/20 text-xs font-semibold transition-colors">
+                                <Globe size={13} /> Website
+                            </a>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ShopLocalSection = () => {
+    const [zip, setZip] = useState('');
+    const [location, setLocation] = useState(null); // { lat, lng, name }
+    const [radius, setRadius] = useState(10);
+    const [shops, setShops] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [geoLoading, setGeoLoading] = useState(false);
+    const [webLoading, setWebLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [selectedShop, setSelectedShop] = useState(null);
+    const [showMap, setShowMap] = useState(false);
+    const [favorites, setFavorites] = useState(() => loadShopFavorites());
+
+    const searchShops = useCallback(async (loc, mi) => {
+        setLoading(true);
+        setError(null);
+        setShops([]);
+        try {
+            const res = await fetch(`/api/shops?action=search&lat=${loc.lat}&lng=${loc.lng}&radius=${mi}`);
+            const data = await res.json();
+            if (!res.ok) {
+                if (res.status === 503) {
+                    throw new Error('Map service is currently busy. Try "Search Web" below to discover stores instead!');
+                }
+                throw new Error(data.error || 'Search failed');
+            }
+            const normalized = (data.elements || [])
+                .map(normalizeOSMShop)
+                .filter(s => s.lat && s.lon && s.name !== 'Record Store');
+            setShops(normalized);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const handleWebSearch = async () => {
+        if (!location) return;
+        setWebLoading(true);
+        setError(null);
+        try {
+            const q = location.name.split(',')[0] || 'this area';
+            const res = await fetch(`/api/search-shops?q=${encodeURIComponent(`record stores in ${q}`)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Web search failed');
+            
+            // Geocode web results that don't have lat/lng
+            const geocoded = await Promise.all((data.shops || []).map(async (s) => {
+                // If it already has coordinates (unlikely from this backend, but good for future)
+                if (s.lat && (s.lon || s.lng)) return { ...s, lon: s.lon || s.lng };
+                
+                try {
+                    const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(s.address)}&format=json&limit=1`, {
+                        headers: { 'User-Agent': 'SpinVinyl/1.0' }
+                    });
+                    const geoData = await geoRes.json();
+                    if (geoData?.[0]) {
+                        return { 
+                            ...s, 
+                            lat: parseFloat(geoData[0].lat), 
+                            lon: parseFloat(geoData[0].lon),
+                            isWeb: true 
+                        };
+                    }
+                } catch (e) { 
+                    console.warn('Geocoding failed for', s.name); 
+                }
+                return { ...s, isWeb: true };
+            }));
+
+            // Filter out any results that failed to geocode to prevent map crashes
+            const validShops = geocoded.filter(s => s.lat && s.lon);
+
+            // Merge with existing shops, avoiding duplicates
+            setShops(prev => {
+                const existingNames = new Set(prev.map(p => p.name.toLowerCase()));
+                const newOnes = validShops.filter(ws => !existingNames.has(ws.name.toLowerCase()));
+                return [...prev, ...newOnes];
+            });
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setWebLoading(false);
+        }
+    };
+
+    const handleZipSubmit = async (e) => {
+        e.preventDefault();
+        if (!zip.trim()) return;
+        setGeoLoading(true);
+        setError(null);
+        try {
+            const res = await fetch(`/api/shops?action=geocode&zip=${encodeURIComponent(zip.trim())}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not find that location');
+            const loc = { lat: data.lat, lng: data.lng, name: data.name };
+            setLocation(loc);
+            searchShops(loc, radius);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setGeoLoading(false);
+        }
+    };
+
+    const handleGeolocate = () => {
+        if (!navigator.geolocation) { setError('Geolocation is not supported by your browser.'); return; }
+        setGeoLoading(true);
+        setError(null);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, name: 'your location' };
+                setLocation(loc);
+                setGeoLoading(false);
+                searchShops(loc, radius);
+            },
+            () => { setGeoLoading(false); setError('Could not get your location. Try entering a zip code instead.'); },
+        );
+    };
+
+    const handleRadiusChange = (mi) => {
+        setRadius(mi);
+        if (location) searchShops(location, mi);
+    };
+
+    const toggleFavorite = (shopId) => {
+        setFavorites(prev => {
+            const next = new Set(prev);
+            if (next.has(shopId)) next.delete(shopId); else next.add(shopId);
+            saveShopFavorites(next);
+            return next;
+        });
+    };
+
+    // Favorites float to top, then alphabetical
+    const sortedShops = useMemo(() => [...shops].sort((a, b) => {
+        const af = favorites.has(a.id) ? 1 : 0;
+        const bf = favorites.has(b.id) ? 1 : 0;
+        if (bf !== af) return bf - af;
+        return a.name.localeCompare(b.name);
+    }), [shops, favorites]);
+
+    return (
+        <div>
+            {selectedShop && (
+                <ShopDetailModal
+                    shop={selectedShop}
+                    onClose={() => setSelectedShop(null)}
+                    favorites={favorites}
+                    onToggleFavorite={toggleFavorite}
+                />
+            )}
+
+            {/* Header */}
+            <div className="mb-5">
+                <h2 className="text-base font-bold text-white">Shop Local</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Find vinyl record stores near you · powered by OpenStreetMap</p>
+            </div>
+
+            {/* Search card */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 mb-5">
+                <form onSubmit={handleZipSubmit} className="flex gap-2 mb-3">
+                    <div className="relative flex-1">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                        <input
+                            type="text"
+                            value={zip}
+                            onChange={e => setZip(e.target.value)}
+                            placeholder="Enter zip code…"
+                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                        />
+                    </div>
+                    <button type="submit" disabled={geoLoading || !zip.trim()}
+                        className="px-4 py-2.5 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/30 text-violet-300 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                        {geoLoading ? <Loader2 size={14} className="animate-spin" /> : 'Search'}
+                    </button>
+                    <button type="button" onClick={handleGeolocate} disabled={geoLoading} title="Use my location"
+                        className="px-3 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-gray-400 hover:text-white transition-colors disabled:opacity-40 flex items-center gap-1.5 text-sm font-semibold flex-shrink-0">
+                        {geoLoading ? <Loader2 size={14} className="animate-spin" /> : <Navigation size={14} />}
+                        <span className="hidden sm:inline">My Location</span>
+                    </button>
+                </form>
+
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-500">Within:</span>
+                        {RADIUS_OPTIONS.map(opt => (
+                            <button key={opt.value} onClick={() => handleRadiusChange(opt.value)}
+                                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${radius === opt.value ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                    {location && (
+                        <div className="flex items-center gap-2">
+                            <button onClick={handleWebSearch} disabled={webLoading}
+                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-40">
+                                {webLoading ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                                Search Web
+                            </button>
+                            <button onClick={() => setShowMap(v => !v)}
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${showMap ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
+                                <Map size={12} /> {showMap ? 'Hide Map' : 'Show Map'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {location && (
+                    <p className="text-xs text-gray-500 mt-2.5 flex items-center gap-1">
+                        <MapPin size={10} className="text-violet-500" />
+                        Showing results near <span className="text-gray-300 ml-0.5">{location.name}</span>
+                    </p>
+                )}
+            </div>
+
+            {/* Collapsible map */}
+            {showMap && location && (
+                <div className="mb-5 rounded-2xl overflow-hidden border border-white/10" style={{ height: 340, position: 'relative', zIndex: 0 }}>
+                    <MapContainer center={[location.lat, location.lng]} zoom={12} className="w-full h-full" zoomControl>
+                        <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                        />
+                        <Circle
+                            center={[location.lat, location.lng]}
+                            radius={radius * 1609.34}
+                            pathOptions={{ color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.1, weight: 2, dashArray: '8 6' }}
+                        />
+                        <Marker position={[location.lat, location.lng]} icon={createUserLocationIcon()}>
+                            <Popup><span style={{ fontSize: 12 }}>Your location</span></Popup>
+                        </Marker>
+                        <MarkerClusterGroup chunkedLoading>
+                            {sortedShops.map(shop => (
+                                <Marker
+                                    key={shop.id}
+                                    position={[shop.lat, shop.lon]}
+                                    icon={createShopIcon(selectedShop?.id === shop.id)}
+                                    eventHandlers={{ click: () => setSelectedShop(shop) }}
+                                >
+                                    <Popup>
+                                        <div style={{ minWidth: 130 }}>
+                                            <strong style={{ fontSize: 13, display: 'block' }}>{shop.name}</strong>
+                                            {shop.address && <span style={{ fontSize: 11, color: '#888' }}>{shop.address}</span>}
+                                        </div>
+                                    </Popup>
+                                </Marker>
+                            ))}
+                        </MarkerClusterGroup>
+                        <MapBoundsController shops={sortedShops} />
+                        <MapPanController shop={selectedShop} />
+                    </MapContainer>
+                </div>
+            )}
+
+            {/* Error */}
+            {error && (
+                <div className="text-center py-10 px-6 rounded-2xl bg-rose-500/5 border border-rose-500/10 text-rose-400 text-sm flex flex-col items-center gap-4 mb-6 animate-in fade-in slide-in-from-bottom-2">
+                    <AlertCircle size={32} className="text-rose-500/50" />
+                    <p className="max-w-xs leading-relaxed">{error}</p>
+                    {error.includes('Search Web') && (
+                        <button 
+                            onClick={handleWebSearch}
+                            disabled={webLoading}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold shadow-lg shadow-violet-900/20 transition-all active:scale-95 disabled:opacity-50"
+                        >
+                            {webLoading ? <Loader2 size={16} className="animate-spin" /> : <Globe size={16} />}
+                            Try Web Search Now
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Loading skeletons */}
+            {loading && (
+                <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <div key={i} className="animate-pulse rounded-2xl bg-white/[0.03] border border-white/5 p-4 flex gap-4">
+                            <div className="w-16 h-16 rounded-xl bg-white/10 flex-shrink-0" />
+                            <div className="flex-1 space-y-2.5 pt-1">
+                                <div className="h-4 bg-white/10 rounded w-2/3" />
+                                <div className="h-3 bg-white/5 rounded w-3/4" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Prompt */}
+            {!loading && !error && !location && (
+                <div className="text-center py-16 text-gray-600">
+                    <MapPin size={44} className="mx-auto mb-4 opacity-20" />
+                    <p className="text-sm">Enter your zip code or tap My Location</p>
+                    <p className="text-xs mt-1 text-gray-700">to find vinyl record stores near you.</p>
+                </div>
+            )}
+
+            {/* Zero results */}
+            {!loading && !error && location && shops.length === 0 && (
+                <div className="text-center py-16 text-gray-600">
+                    <Store size={44} className="mx-auto mb-4 opacity-20" />
+                    <p className="text-sm">No record stores found in this area.</p>
+                    <p className="text-xs mt-1 text-gray-700 mb-6">Try increasing the search radius or search the wider web.</p>
+                    <button
+                        onClick={handleWebSearch}
+                        disabled={webLoading}
+                        className="mx-auto flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold shadow-lg shadow-violet-500/20 transition-all disabled:opacity-50"
+                    >
+                        {webLoading ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />}
+                        Search the Web for Stores
+                    </button>
+                </div>
+            )}
+
+            {/* Shop list */}
+            {!loading && sortedShops.length > 0 && (
+                <div className="space-y-2">
+                    {sortedShops.map(shop => {
+                        const isFav = favorites.has(shop.id);
+                        return (
+                            <div
+                                key={shop.id}
+                                onClick={() => setSelectedShop(shop)}
+                                className="group flex items-start gap-4 p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
+                            >
+                                <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden border border-white/10 bg-gray-800">
+                                    <ShopPlaceholder />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex flex-col gap-0.5">
+                                            <p className="text-sm font-bold text-white group-hover:text-violet-300 transition-colors leading-tight">{shop.name}</p>
+                                            {shop.source === 'web' && (
+                                                <span className="text-[9px] font-black uppercase tracking-wider text-violet-400 flex items-center gap-1">
+                                                    <Globe size={10} /> Found via Web
+                                                </span>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={e => { e.stopPropagation(); toggleFavorite(shop.id); }}
+                                            className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border transition-all ${isFav ? 'bg-rose-500/20 border-rose-500/40 text-rose-400' : 'bg-white/5 border-white/10 text-gray-600 hover:text-rose-400 hover:border-rose-400/30 opacity-0 group-hover:opacity-100'}`}
+                                            title={isFav ? 'Remove from favorites' : 'Save as favorite'}
+                                        >
+                                            <Heart size={12} className={isFav ? 'fill-rose-400' : ''} />
+                                        </button>
+                                    </div>
+                                    {shop.address && <p className="text-xs text-gray-500 truncate mt-0.5">{shop.address}</p>}
+                                    {shop.phone && <p className="text-xs text-gray-600 mt-0.5">{shop.phone}</p>}
+                                    {shop.hours && <p className="text-[10px] text-gray-600 truncate mt-0.5">{shop.hours}</p>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
@@ -1694,6 +2265,7 @@ const TABS = [
     { id: 'newReleases', label: 'Upcoming Releases', icon: Disc3 },
     { id: 'completeCollection', label: 'Complete Collection', icon: Library },
     { id: 'wantlist', label: 'Wantlist', icon: Heart },
+    { id: 'shopLocal', label: 'Shop Local', icon: Store },
 ];
 
 const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
@@ -1796,6 +2368,9 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
                 )}
                 {activeTab === 'wantlist' && (
                     <WantlistSection />
+                )}
+                {activeTab === 'shopLocal' && (
+                    <ShopLocalSection />
                 )}
             </div>
         </div>
