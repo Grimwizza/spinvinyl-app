@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass } from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle } from 'lucide-react';
 import { recordSession, getStoredStats } from '../lib/statsEngine.js';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import BadgeToast from '../components/BadgeToast.jsx';
 import AchievementsPage from './AchievementsPage.jsx';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
+import BarcodeScanner from '../components/BarcodeScanner.jsx';
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -1200,6 +1201,8 @@ export const SpinVinyl = () => {
 
     // ─── Gamification State ──────────────────────────────────────
     const [activePage, setActivePage] = useState('collection'); // 'collection' | 'achievements' | 'stats'
+    const [showScanner, setShowScanner] = useState(false);
+    const [scanToast, setScanToast] = useState(null); // { title } for 3s
     const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
@@ -1620,6 +1623,15 @@ export const SpinVinyl = () => {
                                     </div>
                                 )}
                             </div>
+                            {/* Scan button */}
+                            <button
+                                onClick={() => setShowScanner(true)}
+                                title="Scan a record barcode"
+                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 hover:bg-violet-500/20 transition-colors min-h-[44px] flex-shrink-0 active:opacity-70"
+                            >
+                                <ScanLine size={17} />
+                                <span className="hidden sm:inline text-sm font-semibold">Scan</span>
+                            </button>
                             {/* View toggle */}
                             <div className="flex rounded-xl border border-white/10 overflow-hidden flex-shrink-0">
                                 <button onClick={() => setViewMode('grid')} className={`p-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors active:opacity-70 ${viewMode === 'grid' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="Grid view">
@@ -1855,6 +1867,27 @@ export const SpinVinyl = () => {
                 <BadgeToast
                     badge={pendingBadges[0]}
                     onDismiss={() => setPendingBadges(prev => prev.slice(1))}
+                />
+            )}
+
+            {/* Scan success toast */}
+            {scanToast && (
+                <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px)+12px)] left-1/2 -translate-x-1/2 z-[300] px-4 py-3 rounded-2xl bg-green-500/20 border border-green-500/40 backdrop-blur-xl shadow-xl flex items-center gap-2.5 text-sm font-semibold text-green-300 max-w-[90vw] animate-in slide-in-from-bottom-4 duration-300">
+                    <CheckCircle size={16} className="flex-shrink-0" />
+                    <span className="truncate">Added "{scanToast.title}" to your collection</span>
+                </div>
+            )}
+
+            {/* Barcode scanner modal */}
+            {showScanner && (
+                <BarcodeScanner
+                    onClose={() => setShowScanner(false)}
+                    clearCollectionCache={clearCollectionCache}
+                    onAddSuccess={(title) => {
+                        setShowScanner(false);
+                        setScanToast({ title });
+                        setTimeout(() => setScanToast(null), 3500);
+                    }}
                 />
             )}
         </div>
