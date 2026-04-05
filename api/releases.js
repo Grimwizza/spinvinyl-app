@@ -44,7 +44,7 @@ const parseRSSFeed = (xml, source) => {
     const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
     let match;
 
-    while ((match = itemRegex.exec(xml)) !== null && items.length < 12) {
+    while ((match = itemRegex.exec(xml)) !== null && items.length < 8) {
         const chunk = match[1];
 
         const title = decodeEntities(getTagContent(chunk, 'title'));
@@ -78,12 +78,23 @@ const parseRSSFeed = (xml, source) => {
 };
 
 // ─── Feed Sources ─────────────────────────────────────────────────
+// Vinyl-focused: Vinyl Factory, Analog Planet, Bandcamp Daily
+// Popular artists + tours: Rolling Stone, BrooklynVegan, Consequence, Stereogum
+// Broad music news: Pitchfork, NME
 
 const FEEDS = [
-    { url: 'https://thevinylfactory.com/feed/', source: 'Vinyl Factory' },
-    { url: 'https://pitchfork.com/rss/news/', source: 'Pitchfork' },
-    { url: 'https://daily.bandcamp.com/feed', source: 'Bandcamp Daily' },
-    { url: 'https://www.nme.com/feed', source: 'NME' },
+    // Vinyl & collector-focused
+    { url: 'https://thevinylfactory.com/feed/',                             source: 'Vinyl Factory'  },
+    { url: 'https://www.analogplanet.com/rss.xml',                          source: 'Analog Planet'  },
+    { url: 'https://daily.bandcamp.com/feed',                               source: 'Bandcamp Daily' },
+    // Popular artists, new releases & tours
+    { url: 'https://www.rollingstone.com/music/feed/',                      source: 'Rolling Stone'  },
+    { url: 'https://www.brooklynvegan.com/feed/',                           source: 'BrooklynVegan'  },
+    { url: 'https://consequence.net/feed/',                                 source: 'Consequence'    },
+    { url: 'https://stereogum.com/feed/',                                   source: 'Stereogum'      },
+    // Broad music news
+    { url: 'https://pitchfork.com/rss/news/',                               source: 'Pitchfork'      },
+    { url: 'https://www.nme.com/feed',                                      source: 'NME'            },
 ];
 
 // ─── Handler ──────────────────────────────────────────────────────
@@ -131,7 +142,7 @@ export default async function handler(req, res) {
     const deduped = articles
         .filter(a => { if (seen.has(a.url)) return false; seen.add(a.url); return true; })
         .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
-        .slice(0, 40);
+        .slice(0, 54); // 9 sources × 8 items = 72 → trim to 54 newest
 
     return res.status(200).json({ articles: deduped, errors });
 }

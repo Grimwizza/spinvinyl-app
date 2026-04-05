@@ -269,6 +269,34 @@ body {
   }
 }
 
+/* ── Mobile Foundation ───────────────────────────────────────── */
+
+/* Remove tap flash on all interactive elements (iOS/Android) */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent double-tap zoom delay on buttons and links */
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+
+/* Momentum scrolling on all scroll containers (iOS) */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Body scroll lock — applied via JS when a modal is open */
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  /* Keeps page from jumping to top on iOS */
+}
+
 /* ── Mobile Text Scaling ─────────────────────────────────────── */
 @media screen and (max-width: 639px) {
   /* Slightly larger base font so relative sizes scale up */

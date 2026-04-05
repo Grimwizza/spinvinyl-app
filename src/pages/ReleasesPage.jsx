@@ -55,10 +55,18 @@ const saveUpcomingWantlist = (map) => {
 const cleanName = (name) => (name || '').replace(/\s*\(\d+\)\s*$/, '').trim();
 
 const SOURCE_COLORS = {
-    'Vinyl Factory': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    'Pitchfork': 'bg-green-500/20 text-green-300 border-green-500/30',
+    // Vinyl-focused
+    'Vinyl Factory':  'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    'Analog Planet':  'bg-orange-500/20 text-orange-300 border-orange-500/30',
     'Bandcamp Daily': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    'NME': 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    // Popular artists + tours
+    'Rolling Stone':  'bg-red-500/20 text-red-300 border-red-500/30',
+    'BrooklynVegan':  'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+    'Consequence':    'bg-violet-500/20 text-violet-300 border-violet-500/30',
+    'Stereogum':      'bg-teal-500/20 text-teal-300 border-teal-500/30',
+    // Broad music news
+    'Pitchfork':      'bg-green-500/20 text-green-300 border-green-500/30',
+    'NME':            'bg-rose-500/20 text-rose-300 border-rose-500/30',
 };
 
 // ─── Completion Ring SVG ──────────────────────────────────────────
@@ -137,7 +145,7 @@ const matchesArtist = (raw, normalizedArtistSet) => {
 };
 
 // ─── Upcoming Release Modal ───────────────────────────────────────
-const UpcomingReleaseModal = ({ release, enrichedData, onClose, addToWantlist, wantlistState }) => {
+const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }) => {
     const [bio, setBio] = useState(null);
     const [loadingBio, setLoadingBio] = useState(true);
     const [detail, setDetail] = useState(null);
@@ -145,7 +153,18 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose, addToWantlist, w
     // Use artist/title from the scraper directly — no Discogs lookup needed
     const artist = release.artist || (release.raw?.includes(' - ') ? release.raw.split(' - ')[0].trim() : 'Unknown Artist');
     const title = release.title || release.raw;
-    const thumb = enrichedData?.thumb || release.thumb;
+    const thumb = release.thumb;
+
+    useEffect(() => {
+        const scrollY = window.scrollY;
+        document.body.classList.add('modal-open');
+        document.body.style.top = `-${scrollY}px`;
+        return () => {
+            document.body.classList.remove('modal-open');
+            document.body.style.top = '';
+            window.scrollTo(0, scrollY);
+        };
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -190,7 +209,7 @@ const UpcomingReleaseModal = ({ release, enrichedData, onClose, addToWantlist, w
             <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors"
+                    className="absolute top-4 right-4 z-10 w-10 h-10 min-w-[44px] min-h-[44px] rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors active:opacity-70"
                 >
                     <span className="text-xl leading-none">&times;</span>
                 </button>
@@ -317,9 +336,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const [artistGenres, setArtistGenres] = useState(null);
     const [genrePrefs, setGenrePrefs] = useState(null);
     const [genreWeights, setGenreWeights] = useState(null);
-    const [enriched, setEnriched] = useState({});
     const [loading, setLoading] = useState(false);
-    const [enriching, setEnriching] = useState(false);
     const [error, setError] = useState(null);
 
     const [selectedRelease, setSelectedRelease] = useState(null);
@@ -331,7 +348,6 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         return state;
     });
     const [toastMsg, setToastMsg] = useState(null);
-    const enrichAttempted = useRef(false);
 
     const addToWantlist = useCallback((e, release) => {
         e.stopPropagation();
@@ -387,62 +403,20 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         setGenreWeights(weights);
     }, [collection, collectionLoading]);
 
-    // ── Background enrichment: artwork + genres for all releases ─────────
-    // Enriches all upcoming releases (up to 30) for cover art; non-artist-
-    // matched ones also use genre data for the "Matches Your Taste" section.
-    const doEnrichment = useCallback(async (upcomingList, aSet, gPrefs) => {
-        const toEnrich = upcomingList.slice(0, 30);
-        if (toEnrich.length === 0) { setEnriching(false); return; }
-
-        const results = {};
-        for (const r of toEnrich) {
-            try {
-                const res = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(r.title || r.raw)}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    const top = data.results?.[0];
-                    if (top) {
-                        results[r.raw] = {
-                            genres: [...(top.genre ?? []), ...(top.style ?? [])],
-                            thumb: top.cover_image || top.thumb || null,
-                        };
-                    }
-                } else if (res.status === 401) {
-                    break;
-                }
-            } catch { /* skip */ }
-            await new Promise(resolve => setTimeout(resolve, 350));
-        }
-
-        setEnriched(results);
-        setEnriching(false);
-
-        // Persist enriched data in cache so subsequent loads skip re-enrichment
-        try {
-            const cacheRaw = localStorage.getItem(CACHE_KEYS.releases);
-            if (cacheRaw) {
-                const parsed = JSON.parse(cacheRaw);
-                parsed.data.enriched = results;
-                localStorage.setItem(CACHE_KEYS.releases, JSON.stringify(parsed));
-            }
-        } catch { /* ignore cache errors */ }
-    }, []);
-
-    // ── Fetch upcoming releases from upcomingvinyl.com (cached separately) ──
+    // ── Fetch upcoming releases — server returns fully enriched data ──────────
+    // Enrichment (Discogs artwork + genres) now happens in api/upcoming.js with
+    // a shared 6-hour server-side cache. No per-user API calls needed here.
     const fetchUpcoming = useCallback(async (force = false) => {
         if (!force) {
             const cached = readCache(CACHE_KEYS.releases);
             if (cached?.upcoming) {
                 setUpcoming(cached.upcoming);
-                if (cached.enriched) setEnriched(cached.enriched);
                 return;
             }
         }
         clearCache(CACHE_KEYS.releases);
-        enrichAttempted.current = false;
         setLoading(true);
         setError(null);
-        setEnriched({});
         try {
             const res = await fetch('/api/upcoming');
             const data = res.ok ? await res.json() : { releases: [] };
@@ -458,21 +432,6 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
     useEffect(() => { fetchUpcoming(); }, [fetchUpcoming]);
 
-    // ── Trigger enrichment once upcoming + genre prefs are both ready ──
-    useEffect(() => {
-        if (
-            !enrichAttempted.current &&
-            upcoming.length > 0 &&
-            artistSet &&
-            genrePrefs?.size > 0 &&
-            !collectionLoading
-        ) {
-            enrichAttempted.current = true;
-            setEnriching(true);
-            doEnrichment(upcoming, artistSet, genrePrefs);
-        }
-    }, [upcoming, artistSet, genrePrefs, collectionLoading, doEnrichment]);
-
     // ── Annotate upcoming releases ────────────────────────────────────
     const annotatedUpcoming = useMemo(() => {
         if (!artistSet || upcoming.length === 0) return upcoming;
@@ -485,8 +444,8 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 const genres = artistGenres?.get(artistMatch) ? [...artistGenres.get(artistMatch)].slice(0, 4) : [];
                 return { ...r, isForYou: true, _matchedArtist: r.artist || artistMatch, _genres: genres };
             }
-            if (genrePrefs?.size > 0 && enriched[r.raw]?.genres) {
-                const matching = enriched[r.raw].genres.filter(g => genrePrefs.has(g));
+            if (genrePrefs?.size > 0 && r.genres?.length > 0) {
+                const matching = r.genres.filter(g => genrePrefs.has(g));
                 if (matching.length > 0) {
                     const weightedScore = matching.reduce((s, g) => s + (genreWeights?.get(g) ?? 0), 0);
                     const sortedGenres = [...matching].sort((a, b) => (genreWeights?.get(b) ?? 0) - (genreWeights?.get(a) ?? 0));
@@ -495,7 +454,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             }
             return r;
         });
-    }, [upcoming, artistSet, artistGenres, genrePrefs, genreWeights, enriched]);
+    }, [upcoming, artistSet, artistGenres, genrePrefs, genreWeights]);
 
     const groupedReleases = useMemo(() => {
         const groups = {};
@@ -540,7 +499,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         return (
             <div
                 onClick={() => setSelectedRelease(release)}
-                className="w-full text-left flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group cursor-pointer"
+                className="w-full text-left flex items-center gap-3 py-2.5 px-3 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all group cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
             >
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded shadow flex-shrink-0 overflow-hidden bg-white/5 flex items-center justify-center border border-white/10">
                     {release.thumb ? (
@@ -655,7 +614,6 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             {selectedRelease && (
                 <UpcomingReleaseModal
                     release={selectedRelease}
-                    enrichedData={enriched[selectedRelease.raw]}
                     onClose={() => setSelectedRelease(null)}
                     addToWantlist={addToWantlist}
                     wantlistState={wantlistState}
@@ -673,14 +631,6 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             {/* All upcoming grouped by date */}
             {!loading && annotatedUpcoming.length > 0 && (
                 <div className="mb-6">
-                    {/* Enriching indicator */}
-                    {!loading && enriching && genrePrefs?.size > 0 && (
-                        <p className="text-xs text-pink-400 mb-4 flex items-center gap-1.5">
-                            <Loader2 size={11} className="animate-spin" />
-                            Searching upcoming releases for genre matches...
-                        </p>
-                    )}
-
                     {groupedReleases.map(([date, items]) => (
                         <div key={date} className="mb-5">
                             <a
@@ -705,7 +655,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                             <div
                                                 key={`${r.raw}-${i}`}
                                                 onClick={() => setSelectedRelease(r)}
-                                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 text-left cursor-pointer"
+                                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 text-left cursor-pointer active:scale-[0.98] active:opacity-80"
                                             >
                                                 <div className="aspect-square bg-gray-800 relative overflow-hidden">
                                                     {r.thumb ? (
@@ -1030,7 +980,7 @@ const WantlistSection = () => {
                     {viewMode === 'grid' ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {savedUpcoming.map(r => (
-                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer">
+                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer active:scale-[0.98] active:opacity-80">
                                     <div className="aspect-square bg-gray-800 relative overflow-hidden">
                                         {r.thumb ? (
                                             <img src={r.thumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
@@ -1058,7 +1008,7 @@ const WantlistSection = () => {
                     ) : (
                         <div className="space-y-1">
                             {savedUpcoming.map(r => (
-                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer">
+                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]">
                                     <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
                                         {r.thumb ? (
                                             <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
@@ -1169,7 +1119,7 @@ const WantlistSection = () => {
                         return (
                             <div
                                 key={item.id}
-                                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
+                                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
                                 onClick={() => setSelectedRelease({ release: { ...info, label, type: 'release' }, artistName })}
                             >
                                 <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
@@ -2068,7 +2018,7 @@ const ShopLocalSection = () => {
                             value={zip}
                             onChange={e => setZip(e.target.value)}
                             placeholder="Enter zip code…"
-                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-base text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
                         />
                     </div>
                     <button type="submit" disabled={geoLoading || !zip.trim()}
@@ -2222,7 +2172,7 @@ const ShopLocalSection = () => {
                             <div
                                 key={shop.id}
                                 onClick={() => setSelectedShop(shop)}
-                                className="group flex items-start gap-4 p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer"
+                                className="group flex items-start gap-4 p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
                             >
                                 <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden border border-white/10 bg-gray-800">
                                     <ShopPlaceholder />

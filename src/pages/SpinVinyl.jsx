@@ -174,7 +174,7 @@ const SORT_OPTIONS = [
 // Canonical collection is always cached in added_desc order.
 // All display sorting is done client-side via filteredAndSorted.
 const COLLECTION_CACHE_KEY = 'sv_collection_cache';
-const COLLECTION_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const COLLECTION_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours (Discogs ToS max)
 
 const readCollectionCache = () => {
     try {
@@ -353,6 +353,18 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
     const [detail, setDetail] = useState(null);
     const [artistInfo, setArtistInfo] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    // Lock body scroll while modal is open (iOS + Android)
+    useEffect(() => {
+        const scrollY = window.scrollY;
+        document.body.classList.add('modal-open');
+        document.body.style.top = `-${scrollY}px`;
+        return () => {
+            document.body.classList.remove('modal-open');
+            document.body.style.top = '';
+            window.scrollTo(0, scrollY);
+        };
+    }, []);
 
     useEffect(() => {
         if (!release?.id) return;
@@ -1314,14 +1326,24 @@ export const SpinVinyl = () => {
             let allReleases = [...(data1.releases ?? [])];
             setTotalItems(total);
 
-            for (let p = 2; p <= pages; p++) {
-                setLoadingProgress(`Loading page ${p} of ${pages}…`);
-                const res = await fetch(
-                    `/api/discogs?action=collection&page=${p}&per_page=100&sort=added&sort_order=desc`
-                );
-                if (!res.ok) throw new Error(`API error on page ${p}: ${res.status}`);
-                const data = await res.json();
-                allReleases = [...allReleases, ...(data.releases ?? [])];
+            // Fetch remaining pages in parallel batches of 5
+            if (pages > 1) {
+                const pageNums = Array.from({ length: pages - 1 }, (_, i) => i + 2);
+                for (let i = 0; i < pageNums.length; i += 5) {
+                    const batch = pageNums.slice(i, i + 5);
+                    const last = batch[batch.length - 1];
+                    setLoadingProgress(`Loading pages ${batch[0]}–${last} of ${pages}…`);
+                    const responses = await Promise.all(
+                        batch.map(p =>
+                            fetch(`/api/discogs?action=collection&page=${p}&per_page=100&sort=added&sort_order=desc`)
+                        )
+                    );
+                    for (const res of responses) {
+                        if (!res.ok) throw new Error(`API error: ${res.status}`);
+                        const data = await res.json();
+                        allReleases = [...allReleases, ...(data.releases ?? [])];
+                    }
+                }
             }
 
             setReleases(allReleases);
@@ -1487,7 +1509,7 @@ export const SpinVinyl = () => {
 
     // ─── Render Authenticated State ──────────────────────────────
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-20">
+        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
             {/* ─── Page Router ──────────────────────────────── */}
             {activePage === 'achievements' && (
                 <AchievementsPage collectionCount={totalItems} />
@@ -1568,7 +1590,7 @@ export const SpinVinyl = () => {
                             <div className="relative flex-1 min-w-0">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                                 <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search…"
-                                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all text-sm"
+                                    className="w-full pl-9 pr-3 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all text-base"
                                 />
                             </div>
                             {/* Sort */}
@@ -1600,11 +1622,11 @@ export const SpinVinyl = () => {
                             </div>
                             {/* View toggle */}
                             <div className="flex rounded-xl border border-white/10 overflow-hidden flex-shrink-0">
-                                <button onClick={() => setViewMode('grid')} className={`p-3 transition-colors ${viewMode === 'grid' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="Grid view">
-                                    <LayoutGrid size={16} />
+                                <button onClick={() => setViewMode('grid')} className={`p-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors active:opacity-70 ${viewMode === 'grid' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="Grid view">
+                                    <LayoutGrid size={17} />
                                 </button>
-                                <button onClick={() => setViewMode('list')} className={`p-3 transition-colors border-l border-white/10 ${viewMode === 'list' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="List view">
-                                    <List size={16} />
+                                <button onClick={() => setViewMode('list')} className={`p-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors border-l border-white/10 active:opacity-70 ${viewMode === 'list' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="List view">
+                                    <List size={17} />
                                 </button>
                             </div>
                         </div>
@@ -1649,7 +1671,7 @@ export const SpinVinyl = () => {
                                 const isSpinning = nowSpinning?.id === release.id;
                                 return (
                                     <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                        className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/60 ${isSpinning ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
+                                        className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/60 active:scale-95 active:opacity-80 ${isSpinning ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
                                         <div className="aspect-square relative overflow-hidden bg-gray-800">
                                             <AlbumArt release={release} alt={`${cleanName(info.title)} by ${artist}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" fallbackSize={40} />
                                             <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSpinning ? 'bg-violet-900/40' : 'bg-black/0 group-hover:bg-black/50'}`}>
@@ -1701,7 +1723,7 @@ export const SpinVinyl = () => {
                                     const isSpinning = nowSpinning?.id === release.id;
                                     return (
                                         <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                            className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 transition-all duration-200 rounded-lg focus:outline-none ${isSpinning ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
+                                            className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] ${isSpinning ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
                                             <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-800 flex-shrink-0 relative">
                                                 <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
                                                 {isSpinning && <div className="absolute inset-0 bg-violet-500/30 flex items-center justify-center"><Volume2 size={12} className="text-white animate-pulse" /></div>}
@@ -1764,8 +1786,9 @@ export const SpinVinyl = () => {
             </footer>
 
             {/* ─── Bottom Navigation ──────────────────────────── */}
-            <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-950/95 backdrop-blur-xl border-t border-white/10">
-                <div className="flex items-stretch max-w-lg mx-auto">
+            {/* pb-[env(safe-area-inset-bottom)] pads for iPhone home indicator + Android nav bar */}
+            <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-950/95 backdrop-blur-xl border-t border-white/10 pb-[env(safe-area-inset-bottom,0px)]">
+                <div className="flex items-stretch max-w-lg mx-auto h-[60px]">
                     {[
                         { id: 'collection', label: 'Collection', icon: Disc },
                         { id: 'releases', label: 'Explore', icon: Compass },
@@ -1775,7 +1798,7 @@ export const SpinVinyl = () => {
                         <button
                             key={tab.id}
                             onClick={() => setActivePage(tab.id)}
-                            className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-3 transition-all ${
+                            className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all active:opacity-70 active:scale-95 ${
                                 activePage === tab.id
                                     ? 'text-violet-400'
                                     : 'text-gray-500 hover:text-gray-300'
@@ -1785,7 +1808,7 @@ export const SpinVinyl = () => {
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-violet-500 to-pink-500 rounded-full" />
                             )}
                             <tab.icon
-                                size={20}
+                                size={22}
                                 className={activePage === tab.id ? 'drop-shadow-[0_0_8px_rgba(167,139,250,0.7)]' : ''}
                             />
                             <span className="text-[10px] font-semibold tracking-wide">{tab.label}</span>
