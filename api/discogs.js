@@ -315,25 +315,25 @@ export default async function handler(req, res) {
             apiMethod = 'GET';
             break;
         }
-        case ‘removeFromWantlist’: {
-            // Remove a release from the user’s Discogs Wantlist
-            if (!releaseId) return res.status(400).json({ error: ‘Missing release id’ });
+        case 'removeFromWantlist': {
+            // Remove a release from the user's Discogs Wantlist
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
             apiUrl = `${DISCOGS_BASE}/users/${username}/wants/${releaseId}`;
-            apiMethod = ‘DELETE’;
+            apiMethod = 'DELETE';
             break;
         }
-        case ‘barcodeSearch’: {
+        case 'barcodeSearch': {
             // Search Discogs by UPC/EAN barcode — used by the in-app scanner
-            const barcode = url.searchParams.get(‘barcode’) || req.query?.barcode || ‘’;
-            if (!barcode) return res.status(400).json({ error: ‘Missing barcode’ });
+            const barcode = url.searchParams.get('barcode') || req.query?.barcode || '';
+            if (!barcode) return res.status(400).json({ error: 'Missing barcode' });
             apiUrl = `${DISCOGS_BASE}/database/search?barcode=${encodeURIComponent(barcode)}&per_page=10`;
             break;
         }
-        case ‘addToCollection’: {
-            // Add a release to the user’s collection (folder 1 = Uncategorized)
-            if (!releaseId) return res.status(400).json({ error: ‘Missing release id’ });
+        case 'addToCollection': {
+            // Add a release to the user's collection (folder 1 = Uncategorized)
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
             apiUrl = `${DISCOGS_BASE}/users/${username}/collection/folders/1/releases/${releaseId}`;
-            apiMethod = ‘POST’;
+            apiMethod = 'POST';
             break;
         }
         default:
