@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, AlertCircle, Camera } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient.js';
+import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera } from 'lucide-react';
 
 // ─── BarcodeScanner ───────────────────────────────────────────────────────────
 // Uses @zxing/browser BrowserMultiFormatReader for live camera UPC scanning.
@@ -19,7 +18,6 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const [errorMsg, setErrorMsg]       = useState('');
     const [adding, setAdding]           = useState(null);   // release id being added
     const [added, setAdded]             = useState({});     // { [id]: true }
-    const [upcSyncFailed, setUpcSyncFailed] = useState(false); // subtle Supabase warning
 
     // Body scroll lock
     useEffect(() => {
@@ -124,7 +122,6 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         setResults([]);
         setErrorMsg('');
         setAdded({});
-        setUpcSyncFailed(false);
         startLiveScanning();
     };
 
@@ -135,44 +132,31 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         searchByBarcode(code);
     };
 
-    // ── Dual-write: Discogs (primary) + Supabase (secondary) ─────────────────
+    // ── Save scanned UPC to localStorage ─────────────────────────────────────
+    const saveUpcLocally = (upc, release) => {
+        try {
+            const existing = JSON.parse(localStorage.getItem('spinvinyl_scanned_upcs') || '[]');
+            existing.unshift({
+                upc,
+                discogs_username: authUsername || null,
+                release_id:       String(release.id),
+                release_title:    release.title,
+                scanned_at:       new Date().toISOString(),
+            });
+            localStorage.setItem('spinvinyl_scanned_upcs', JSON.stringify(existing));
+        } catch (e) {
+            console.warn('[BarcodeScanner] Failed to save UPC locally:', e);
+        }
+    };
+
     const handleAdd = async (release) => {
         setAdding(release.id);
-        setUpcSyncFailed(false);
         try {
-            const discogsPromise = fetch(
-                `/api/discogs?action=addToCollection&id=${release.id}`,
-                { method: 'POST' }
-            ).then(async (res) => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Failed to add to collection');
-                return data;
-            });
+            const res  = await fetch(`/api/discogs?action=addToCollection&id=${release.id}`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to add to collection');
 
-            const supabasePromise = supabase
-                ? supabase.from('scanned_upcs').insert({
-                    upc:              barcode,
-                    discogs_username: authUsername || null,
-                    release_id:       String(release.id),
-                    release_title:    release.title,
-                  }).then(({ error }) => { if (error) throw error; })
-                : Promise.resolve();
-
-            const [discogsResult, supabaseResult] = await Promise.allSettled([
-                discogsPromise,
-                supabasePromise,
-            ]);
-
-            // Discogs is primary — failure surfaces as an error to the user
-            if (discogsResult.status === 'rejected') {
-                throw new Error(discogsResult.reason?.message || 'Failed to add to collection');
-            }
-
-            // Supabase is secondary — failure shows a subtle warning, never blocks
-            if (supabaseResult.status === 'rejected') {
-                console.warn('[BarcodeScanner] Supabase write failed:', supabaseResult.reason);
-                setUpcSyncFailed(true);
-            }
+            saveUpcLocally(barcode, release);
 
             setAdded(prev => ({ ...prev, [release.id]: true }));
             clearCollectionCache?.();
@@ -269,13 +253,6 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                 {phase === 'error' && <span className="text-red-400">{errorMsg}</span>}
                                 {phase === 'unsupported' && (errorMsg || 'Live scanning not available — enter barcode manually')}
                             </p>
-                            {/* Subtle warning: Discogs write succeeded but Supabase sync failed */}
-                            {upcSyncFailed && (
-                                <p className="text-[11px] text-amber-500/70 mt-1 flex items-center gap-1">
-                                    <AlertCircle size={10} />
-                                    UPC log sync failed — record was added to your Discogs collection
-                                </p>
-                            )}
                         </div>
                         <button
                             onClick={handleRescan}
