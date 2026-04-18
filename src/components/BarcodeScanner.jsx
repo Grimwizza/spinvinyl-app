@@ -69,7 +69,8 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         setPhase('init');
 
         try {
-            const { BrowserMultiFormatReader, NotFoundException } = await import('@zxing/browser');
+            const { BrowserMultiFormatReader } = await import('@zxing/browser');
+            const { NotFoundException } = await import('@zxing/library');
             const reader = new BrowserMultiFormatReader();
 
             setPhase('scanning');
