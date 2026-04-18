@@ -738,6 +738,20 @@ const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlb
         setLyricsTrack('');
     };
 
+    const handleTrackSelect = (idx) => {
+        if (!selectedSide || !sides[selectedSide]) return;
+        const tracks = sides[selectedSide];
+        let cumulative = 0;
+        for (let i = 0; i < idx; i++) {
+            cumulative += tracks[i].durationSeconds || 0;
+        }
+        setElapsed(cumulative);
+        startTimeRef.current = Date.now() - cumulative * 1000;
+        setIsPlaying(true);
+        setLyrics('');
+        setLyricsTrack('');
+    };
+
     // Find current track based on elapsed time
     const currentTrackInfo = useMemo(() => {
         if (!selectedSide || !sides[selectedSide]) return null;
@@ -1009,7 +1023,8 @@ const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlb
                                                 return (
                                                     <div
                                                         key={idx}
-                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isCurrent
+                                                        onClick={() => handleTrackSelect(idx)}
+                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all cursor-pointer ${isCurrent
                                                             ? 'bg-violet-500/15 text-violet-200 shadow-sm'
                                                             : 'text-gray-400 hover:bg-white/[0.03] hover:text-gray-200'
                                                             }`}
