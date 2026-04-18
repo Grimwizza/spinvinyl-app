@@ -1627,10 +1627,10 @@ export const SpinVinyl = () => {
                             <button
                                 onClick={() => setShowScanner(true)}
                                 title="Scan a record barcode"
-                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 hover:bg-violet-500/20 transition-colors min-h-[44px] flex-shrink-0 active:opacity-70"
+                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white shadow-lg shadow-violet-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] min-h-[44px] flex-shrink-0 group"
                             >
-                                <ScanLine size={17} />
-                                <span className="hidden sm:inline text-sm font-semibold">Scan</span>
+                                <ScanLine size={18} className="group-hover:rotate-3 transition-transform" />
+                                <span className="hidden sm:inline text-sm font-bold tracking-wide">Scan Barcode</span>
                             </button>
                             {/* View toggle */}
                             <div className="flex rounded-xl border border-white/10 overflow-hidden flex-shrink-0">
