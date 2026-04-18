@@ -14,8 +14,14 @@ export default defineConfig(({ mode }) => {
         usePolling: true,
       },
     },
+    optimizeDeps: {
+      include: ['react-leaflet-cluster'],
+    },
     build: {
       chunkSizeWarningLimit: 1000,
+      commonjsOptions: {
+        include: [/react-leaflet-cluster/, /node_modules/],
+      },
     },
   }
 })
