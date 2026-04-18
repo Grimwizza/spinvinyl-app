@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle } from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode } from 'lucide-react';
 import { recordSession, getStoredStats } from '../lib/statsEngine.js';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import BadgeToast from '../components/BadgeToast.jsx';
@@ -1569,15 +1569,14 @@ export const SpinVinyl = () => {
                                 </button>
                             </div>
 
-                            {releases.length > 0 && (
-                                <button
-                                    onClick={() => { const pick = releases[Math.floor(Math.random() * releases.length)]; handleAlbumClick(pick); }}
-                                    className="flex items-center justify-center gap-1.5 px-6 py-2.5 sm:px-4 sm:py-2 rounded-xl bg-gradient-to-r from-violet-600/80 to-pink-600/80 hover:from-violet-500 hover:to-pink-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-violet-500/20 transition-all hover:scale-[1.03] active:scale-[0.97] min-h-[44px] w-full sm:w-fit"
-                                >
-                                    <Shuffle size={14} className="sm:size-[16px]" />
-                                    <span>Random Pick</span>
-                                </button>
-                            )}
+                            {/* Scan Barcode (Prominent) */}
+                            <button
+                                onClick={() => setShowScanner(true)}
+                                className="flex items-center justify-center gap-2 px-6 py-2.5 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white text-sm sm:text-base font-bold shadow-lg shadow-violet-500/25 transition-all hover:scale-[1.03] active:scale-[0.97] min-h-[44px] w-full sm:w-fit group"
+                            >
+                                <Barcode size={18} className="group-hover:rotate-3 transition-transform" />
+                                <span>Scan Barcode</span>
+                            </button>
                         </div>
                     </div>
 
@@ -1623,15 +1622,17 @@ export const SpinVinyl = () => {
                                     </div>
                                 )}
                             </div>
-                            {/* Scan button */}
-                            <button
-                                onClick={() => setShowScanner(true)}
-                                title="Scan a record barcode"
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white shadow-lg shadow-violet-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] min-h-[44px] flex-shrink-0 group"
-                            >
-                                <ScanLine size={18} className="group-hover:rotate-3 transition-transform" />
-                                <span className="hidden sm:inline text-sm font-bold tracking-wide">Scan Barcode</span>
-                            </button>
+                            {/* Random Pick (Toolbar) */}
+                            {releases.length > 0 ? (
+                                <button
+                                    onClick={() => { const pick = releases[Math.floor(Math.random() * releases.length)]; handleAlbumClick(pick); }}
+                                    title="Pick a random record"
+                                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 hover:bg-violet-500/20 transition-colors min-h-[44px] flex-shrink-0 active:opacity-70 group"
+                                >
+                                    <Shuffle size={17} className="group-hover:rotate-12 transition-transform" />
+                                    <span className="hidden sm:inline text-sm font-semibold">Random</span>
+                                </button>
+                            ) : null}
                             {/* View toggle */}
                             <div className="flex rounded-xl border border-white/10 overflow-hidden flex-shrink-0">
                                 <button onClick={() => setViewMode('grid')} className={`p-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors active:opacity-70 ${viewMode === 'grid' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="Grid view">
