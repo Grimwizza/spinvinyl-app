@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera } from 'lucide-react';
+import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera, Star, ChevronLeft } from 'lucide-react';
 
 // ─── BarcodeScanner ───────────────────────────────────────────────────────────
 // Uses @zxing/browser BrowserMultiFormatReader for live camera UPC scanning.
@@ -18,6 +18,25 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const [errorMsg, setErrorMsg]       = useState('');
     const [adding, setAdding]           = useState(null);   // release id being added
     const [added, setAdded]             = useState({});     // { [id]: true }
+
+    // ── Extended details state ──
+    const [selectedRelease, setSelectedRelease] = useState(null);
+    const [folders, setFolders]                 = useState([]);
+    const [formRating, setFormRating]           = useState(0);
+    const [formFolder, setFormFolder]           = useState('1'); // Default uncategorized
+    const [formMediaCond, setFormMediaCond]     = useState('Mint (M)');
+    const [formSleeveCond, setFormSleeveCond]   = useState('Mint (M)');
+    const [formNotes, setFormNotes]             = useState('');
+
+    // Fetch user folders on mount
+    useEffect(() => {
+        fetch('/api/discogs?action=getFolders')
+            .then(res => res.json())
+            .then(data => {
+                if (data.folders) setFolders(data.folders);
+            })
+            .catch(e => console.error('[BarcodeScanner] Failed to fetch folders:', e));
+    }, []);
 
     // Body scroll lock
     useEffect(() => {
@@ -134,7 +153,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     };
 
     // ── Save scanned UPC to localStorage ─────────────────────────────────────
-    const saveUpcLocally = (upc, release) => {
+    const saveUpcLocally = (upc, release, formData) => {
         try {
             const existing = JSON.parse(localStorage.getItem('spinvinyl_scanned_upcs') || '[]');
             existing.unshift({
@@ -143,6 +162,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                 release_id:       String(release.id),
                 release_title:    release.title,
                 scanned_at:       new Date().toISOString(),
+                ...formData
             });
             localStorage.setItem('spinvinyl_scanned_upcs', JSON.stringify(existing));
         } catch (e) {
@@ -150,20 +170,48 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         }
     };
 
-    const handleAdd = async (release) => {
-        setAdding(release.id);
+    const handleSelectForEdit = (release) => {
+        setSelectedRelease(release);
+        setPhase('editDetails');
+        setFormRating(0);
+        setFormFolder('1');
+        setFormMediaCond('Mint (M)');
+        setFormSleeveCond('Mint (M)');
+        setFormNotes('');
+        setErrorMsg('');
+    };
+
+    const handleExtendedAdd = async (e) => {
+        e.preventDefault();
+        if (!selectedRelease) return;
+        setAdding(selectedRelease.id);
+        setErrorMsg('');
+
         try {
-            const res  = await fetch(`/api/discogs?action=addToCollection&id=${release.id}`, { method: 'POST' });
+            const payload = {
+                folderId: formFolder,
+                rating: formRating,
+                condition: formMediaCond,
+                sleeve_condition: formSleeveCond,
+                notes: formNotes
+            };
+
+            const res = await fetch(`/api/discogs?action=addToCollectionExtended&id=${selectedRelease.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to add to collection');
 
-            saveUpcLocally(barcode, release);
+            saveUpcLocally(barcode, selectedRelease, payload);
 
-            setAdded(prev => ({ ...prev, [release.id]: true }));
+            setAdded(prev => ({ ...prev, [selectedRelease.id]: true }));
             clearCollectionCache?.();
-            onAddSuccess?.(release.title);
-        } catch (e) {
-            setErrorMsg(e.message);
+            onAddSuccess?.(selectedRelease.title);
+        } catch (err) {
+            setErrorMsg(err.message);
         } finally {
             setAdding(null);
         }
@@ -298,7 +346,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                             </p>
                                         </div>
                                         <button
-                                            onClick={() => !isAdded && !isAdding && handleAdd(r)}
+                                            onClick={() => !isAdded && !isAdding && handleSelectForEdit(r)}
                                             disabled={isAdded || isAdding}
                                             className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold min-w-[76px] min-h-[44px] justify-center flex-shrink-0 transition-all ${
                                                 isAdded
@@ -316,6 +364,114 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+
+                    {/* Edit Details phase */}
+                    {phase === 'editDetails' && selectedRelease && (
+                        <div className="flex flex-col h-full bg-black">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-4 py-4 bg-gray-950 border-b border-white/5">
+                                <button onClick={() => setPhase('results')} className="text-sm font-semibold text-gray-400 hover:text-white transition-colors">Cancel</button>
+                                <h3 className="text-white font-bold text-[15px]">Edit Details</h3>
+                                <div className="w-[45px]"></div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto px-5 py-6 space-y-7 pb-24">
+                                {/* Release Preview */}
+                                <div className="flex gap-4 items-center">
+                                    <div className="w-[72px] h-[72px] rounded-sm overflow-hidden bg-white/5 border border-white/10 flex-shrink-0 shadow-lg relative">
+                                        <img src={selectedRelease.thumb || selectedRelease.cover_image || '/api/placeholder/400/400'} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                    <div className="flex flex-col justify-center min-w-0">
+                                        <p className="text-white font-bold text-[15px] leading-tight mb-1 truncate">{selectedRelease.title}</p>
+                                        <p className="text-gray-400 text-[13px] leading-snug">
+                                            {[selectedRelease.year, selectedRelease.country, (selectedRelease.format || []).slice(0, 2).join('/')].filter(Boolean).join(' · ')}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="w-full h-px bg-white/[0.04]"></div>
+
+                                <div className="space-y-6">
+                                    <p className="text-[13px] text-gray-400 font-medium tracking-wide">Added to Collection: <span className="text-white ml-2">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></p>
+
+                                    {/* Rating */}
+                                    <div>
+                                        <label className="block text-[13px] font-medium text-gray-400 mb-2">My Rating</label>
+                                        <div className="flex items-center gap-1.5 -ml-1">
+                                            {[1, 2, 3, 4, 5].map(star => (
+                                                <button key={star} onClick={() => setFormRating(star)} className="p-1 hover:scale-110 active:scale-95 transition-transform">
+                                                    <Star size={28} strokeWidth={1.5} className={star <= formRating ? 'fill-amber-400 text-amber-400 drop-shadow-md' : 'text-gray-600'} />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Folder */}
+                                    <div>
+                                        <label className="block text-[13px] font-medium text-gray-400 mb-2">Folder</label>
+                                        <div className="relative">
+                                            <select value={formFolder} onChange={e => setFormFolder(e.target.value)} className="w-full appearance-none bg-white/[0.02] border border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04] transition-colors rounded-xl px-4 py-3.5 text-[15px] text-white focus:outline-none focus:ring-2 ring-violet-500/50">
+                                                {folders.map(f => (
+                                                    <option key={f.id} value={f.id} className="bg-gray-900 text-white">{f.name} ({f.count})</option>
+                                                ))}
+                                                {folders.length === 0 && <option value="1" className="bg-gray-900 text-white">Uncategorized</option>}
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M1 1.5L6 6.5L11 1.5" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Conditions */}
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-[13px] font-medium text-gray-400 mb-2">Media Condition</label>
+                                            <div className="relative">
+                                                <select value={formMediaCond} onChange={e => setFormMediaCond(e.target.value)} className="w-full appearance-none bg-white/[0.02] border border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04] transition-colors rounded-xl px-4 py-3.5 text-[15px] text-white focus:outline-none focus:ring-2 ring-violet-500/50">
+                                                    {['Mint (M)', 'Near Mint (NM or M-)', 'Very Good Plus (VG+)', 'Very Good (VG)', 'Good Plus (G+)', 'Good (G)', 'Fair (F)', 'Poor (P)'].map(c => <option className="bg-gray-900 text-white" key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[13px] font-medium text-gray-400 mb-2">Sleeve Condition</label>
+                                            <div className="relative">
+                                                <select value={formSleeveCond} onChange={e => setFormSleeveCond(e.target.value)} className="w-full appearance-none bg-white/[0.02] border border-white/[0.08] hover:border-white/20 hover:bg-white/[0.04] transition-colors rounded-xl px-4 py-3.5 text-[15px] text-white focus:outline-none focus:ring-2 ring-violet-500/50">
+                                                    {['Mint (M)', 'Near Mint (NM or M-)', 'Very Good Plus (VG+)', 'Very Good (VG)', 'Good Plus (G+)', 'Good (G)', 'Fair (F)', 'Poor (P)', 'Generic', 'No Cover'].map(c => <option className="bg-gray-900 text-white" key={c} value={c}>{c}</option>)}
+                                                </select>
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                    <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1.5L6 6.5L11 1.5" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Notes */}
+                                    <div className="pb-8">
+                                        <label className="block text-[13px] font-medium text-gray-400 mb-2">Notes</label>
+                                        <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows="4" placeholder="Enter Notes" className="w-full bg-white/[0.02] border border-white/[0.08] hover:border-white/20 transition-colors rounded-xl px-4 py-3.5 text-[15px] text-white placeholder-gray-600 focus:outline-none focus:ring-2 ring-violet-500/50 resize-none"></textarea>
+                                        <div className="text-right text-[11px] font-medium text-gray-500 mt-1.5">{formNotes.length} / 255</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {errorMsg && <div className="px-5 pb-4 text-[13px] font-medium text-red-400 text-center">{errorMsg}</div>}
+
+                            <div className="p-4 bg-gray-950 border-t border-white/5 flex-shrink-0 pb-safe">
+                                <button
+                                    onClick={handleExtendedAdd}
+                                    disabled={!!adding}
+                                    className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-xl bg-white hover:bg-gray-200 text-black font-bold text-[15px] transition-all disabled:opacity-70 disabled:hover:bg-white"
+                                >
+                                    {adding ? <Loader2 size={18} className="animate-spin text-black" /> : 'Save changes'}
+                                </button>
+                            </div>
                         </div>
                     )}
 

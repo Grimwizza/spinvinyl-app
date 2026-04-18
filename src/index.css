@@ -276,6 +276,15 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Safe-area-aware header padding — overrides pt-10 on notched phones only */
+@media (max-width: 639px) {
+  @supports (padding: max(0px, env(safe-area-inset-top))) {
+    .pt-safe-header {
+      padding-top: max(2.5rem, env(safe-area-inset-top)) !important;
+    }
+  }
+}
+
 /* Prevent double-tap zoom delay on buttons and links */
 button, a, [role="button"] {
   touch-action: manipulation;

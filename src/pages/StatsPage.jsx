@@ -284,7 +284,7 @@ const StatsPage = ({ collectionCount }) => {
             {/* Header */}
             <div className="relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.12),transparent_60%)]" />
-                <div className="relative max-w-3xl mx-auto px-4 pt-10 pb-6 text-center">
+                <div className="relative max-w-3xl mx-auto px-4 pt-10 pt-safe-header pb-6 text-center">
                     <div className="flex items-center justify-center gap-3 mb-2">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center shadow-xl">
                             <BarChart2 size={24} className="text-white" />

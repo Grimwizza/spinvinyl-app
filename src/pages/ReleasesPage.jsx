@@ -2266,7 +2266,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
             {/* Header */}
             <div className="relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,0.12),transparent_60%)]" />
-                <div className="relative max-w-3xl mx-auto px-4 pt-10 pb-5 text-center">
+                <div className="relative max-w-3xl mx-auto px-4 pt-10 pt-safe-header pb-5 text-center">
                     <div className="flex items-center justify-center gap-3 mb-2">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-xl">
                             <Compass size={24} className="text-white" />
@@ -2282,7 +2282,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
             </div>
 
             {/* Sub-tab pills */}
-            <div className="sticky top-0 z-10 bg-gray-950/80 backdrop-blur-xl border-b border-white/5">
+            <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 bg-gray-950/80 backdrop-blur-xl border-b border-white/5">
                 <div className="max-w-3xl mx-auto px-4 flex gap-1 py-2 overflow-x-auto no-scrollbar">
                     {TABS.map(tab => (
                         <button

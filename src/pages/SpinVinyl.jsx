@@ -449,7 +449,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
     const artistBio = artistInfo?.bio || '';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center" onClick={onClose}>
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
@@ -459,7 +459,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header with album art */}
-                <div className="relative flex-shrink-0">
+                <div className="relative flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
                     {/* Background blur */}
                     <div className="absolute inset-0 overflow-hidden">
                         <AlbumArt release={release} alt="" className="w-full h-full object-cover scale-110 blur-2xl opacity-30" />
@@ -467,7 +467,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                     </div>
 
                     {/* Close — larger tap target on mobile */}
-                    <button onClick={onClose} className="absolute top-3 right-3 z-10 p-3 rounded-full bg-black/30 hover:bg-black/50 transition-colors">
+                    <button onClick={onClose} className="absolute right-3 z-10 p-3 rounded-full bg-black/30 hover:bg-black/50 transition-colors" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
                         <X size={20} className="text-white" />
                     </button>
 
@@ -572,7 +572,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                 )}
 
                 {/* Tracklist + info */}
-                <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-6 min-h-0">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 min-h-0" style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom, 0px))' }}>
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
                             <Loader2 size={24} className="text-violet-400 animate-spin" />
@@ -1512,7 +1512,7 @@ export const SpinVinyl = () => {
 
     // ─── Render Authenticated State ──────────────────────────────
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-[calc(5rem+env(safe-area-inset-bottom,0px))]">
+        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))]">
             {/* ─── Page Router ──────────────────────────────── */}
             {activePage === 'achievements' && (
                 <AchievementsPage collectionCount={totalItems} />
@@ -1529,7 +1529,7 @@ export const SpinVinyl = () => {
             <div className="relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent_50%)]" />
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-4 sm:pb-12">
+                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-4 sm:pb-12 pt-safe-header">
                     {/* Header Row — Stacked on mobile, side-by-side on tablet+ */}
                     <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
                         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-4 text-center sm:text-left">
@@ -1586,7 +1586,7 @@ export const SpinVinyl = () => {
                 {/* Main Content */}
                 <div className="max-w-7xl mx-auto px-3 sm:px-6 pb-32">
                     {/* Toolbar — single row on mobile */}
-                    <div className="sticky top-0 z-30 py-3 sm:py-4 bg-gray-950/90 backdrop-blur-xl border-b border-white/5 -mx-3 sm:-mx-6 px-3 sm:px-6 mb-4 sm:mb-8">
+                    <div className="sticky top-[env(safe-area-inset-top,0px)] z-30 py-3 sm:py-4 bg-gray-950/90 backdrop-blur-xl border-b border-white/5 -mx-3 sm:-mx-6 px-3 sm:px-6 mb-4 sm:mb-8">
                         <div className="flex items-center gap-2">
                             {/* Search */}
                             <div className="relative flex-1 min-w-0">

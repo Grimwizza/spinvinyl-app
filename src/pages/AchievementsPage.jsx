@@ -58,7 +58,7 @@ const AchievementsPage = ({ collectionCount }) => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)]" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent_50%)]" />
 
-                <div className="relative max-w-3xl mx-auto px-4 pt-10 pb-6 text-center">
+                <div className="relative max-w-3xl mx-auto px-4 pt-10 pt-safe-header pb-6 text-center">
                     <div className="flex items-center justify-center gap-3 mb-3">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-xl">
                             <Trophy size={24} className="text-white" />

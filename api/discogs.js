@@ -329,12 +329,100 @@ export default async function handler(req, res) {
             apiUrl = `${DISCOGS_BASE}/database/search?barcode=${encodeURIComponent(barcode)}&per_page=10`;
             break;
         }
+        case 'getFolders': {
+            // Fetch all collection folders for the user
+            apiUrl = `${DISCOGS_BASE}/users/${username}/collection/folders`;
+            apiMethod = 'GET';
+            break;
+        }
         case 'addToCollection': {
             // Add a release to the user's collection (folder 1 = Uncategorized)
             if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
             apiUrl = `${DISCOGS_BASE}/users/${username}/collection/folders/1/releases/${releaseId}`;
             apiMethod = 'POST';
             break;
+        }
+        case 'addToCollectionExtended': {
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
+            
+            let payload = {};
+            if (req.method === 'POST') {
+                if (typeof req.body === 'string') {
+                    try { payload = JSON.parse(req.body); } catch(e) {}
+                } else if (req.body) {
+                    payload = req.body;
+                }
+            } else {
+                // Support query parameters as fallback
+                payload = {
+                    folderId: url.searchParams.get('folderId') || req.query?.folderId,
+                    rating: url.searchParams.get('rating') || req.query?.rating,
+                    condition: url.searchParams.get('condition') || req.query?.condition,
+                    sleeve_condition: url.searchParams.get('sleeve_condition') || req.query?.sleeve_condition,
+                    notes: url.searchParams.get('notes') || req.query?.notes
+                };
+            }
+
+            const folderId = payload.folderId || '1';
+            const rating = payload.rating;
+            const condition = payload.condition;
+            const sleeve_condition = payload.sleeve_condition;
+            const notes = payload.notes;
+            
+            try {
+                // 1. Add to designated folder
+                const addUrl = `${DISCOGS_BASE}/users/${username}/collection/folders/${folderId}/releases/${releaseId}`;
+                const addReq = { url: addUrl, method: 'POST' };
+                const addHeader = oauth.toHeader(oauth.authorize(addReq, userToken));
+                
+                const addRes = await fetch(addUrl, {
+                    method: 'POST',
+                    headers: { ...addHeader, 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+                });
+                
+                if (!addRes.ok) {
+                    return res.status(addRes.status).json({ error: `Failed to add to folder`, details: await addRes.text() });
+                }
+                
+                const addData = await addRes.json();
+                const instanceId = addData.instance_id;
+
+                // 2. Add instance details
+                if (instanceId && (condition || sleeve_condition || notes)) {
+                    const editUrl = `${DISCOGS_BASE}/users/${username}/collection/folders/${folderId}/releases/${releaseId}/instances/${instanceId}`;
+                    const editReq = { url: editUrl, method: 'POST' };
+                    const editHeader = oauth.toHeader(oauth.authorize(editReq, userToken));
+                    
+                    const changes = {};
+                    if (condition) changes.condition = condition;
+                    if (sleeve_condition) changes.sleeve_condition = sleeve_condition;
+                    if (notes) changes.notes = notes;
+
+                    await fetch(editUrl, {
+                        method: 'POST',
+                        body: JSON.stringify(changes),
+                        headers: { ...editHeader, 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+                    });
+                }
+
+                // 3. Assign rating
+                if (rating && Number(rating) > 0) {
+                    const rateUrl = `${DISCOGS_BASE}/users/${username}/release-rating/${releaseId}`;
+                    const rateReq = { url: rateUrl, method: 'PUT' };
+                    const rateHeader = oauth.toHeader(oauth.authorize(rateReq, userToken));
+                    
+                    await fetch(rateUrl, {
+                        method: 'PUT',
+                        body: JSON.stringify({ rating: Number(rating) }),
+                        headers: { ...rateHeader, 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
+                    });
+                }
+                
+                return res.status(200).json({ success: true, instance_id: instanceId });
+            } catch (extErr) {
+                console.error('[Extended Add] Error:', extErr);
+                return res.status(500).json({ error: 'Failed during extended add' });
+            }
         }
         default:
             return res.status(400).json({ error: 'Invalid action.' });
