@@ -848,7 +848,7 @@ const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlb
                     </div>
 
                     {/* Top Controls */}
-                    <div className="absolute top-4 right-4 sm:top-8 sm:right-8 flex gap-3 z-50">
+                    <div className="absolute top-4 right-4 sm:top-8 sm:right-8 flex gap-3 z-50" style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}>
                         <button
                             onClick={() => setExpanded(false)}
                             className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all hover:scale-105"
