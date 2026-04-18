@@ -409,7 +409,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const fetchUpcoming = useCallback(async (force = false) => {
         if (!force) {
             const cached = readCache(CACHE_KEYS.releases);
-            if (cached?.upcoming) {
+            if (Array.isArray(cached?.upcoming) && cached.upcoming.length > 0) {
                 setUpcoming(cached.upcoming);
                 return;
             }
@@ -420,9 +420,9 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         try {
             const res = await fetch('/api/upcoming');
             const data = res.ok ? await res.json() : { releases: [] };
-            const list = data.releases ?? [];
+            const list = Array.isArray(data.releases) ? data.releases : [];
             setUpcoming(list);
-            writeCache(CACHE_KEYS.releases, { upcoming: list });
+            if (list.length > 0) writeCache(CACHE_KEYS.releases, { upcoming: list });
         } catch {
             setError('Failed to load upcoming releases. Try refreshing.');
         } finally {
@@ -434,6 +434,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
     // ── Annotate upcoming releases ────────────────────────────────────
     const annotatedUpcoming = useMemo(() => {
+        if (!Array.isArray(upcoming)) return [];
         if (!artistSet || upcoming.length === 0) return upcoming;
         
         return upcoming.map(r => {
