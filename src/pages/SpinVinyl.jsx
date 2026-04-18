@@ -247,6 +247,39 @@ const lyricsSessionCache = new Map();
 const fallbackDurationCache = new Map();
 const inFlightDurationRequests = new Map();
 
+const fetchItunesDuration = async (artist, title) => {
+    try {
+        const query = encodeURIComponent(`${artist} ${title}`);
+        const res = await fetch(`https://itunes.apple.com/search?term=${query}&entity=song&limit=1`);
+        if (!res.ok) return 0;
+        const data = await res.json();
+        if (data?.results?.[0]?.trackTimeMillis) {
+            return Math.floor(data.results[0].trackTimeMillis / 1000);
+        }
+        return 0;
+    } catch {
+        return 0;
+    }
+};
+
+const fetchMusicBrainzDuration = async (artist, title) => {
+    try {
+        const query = encodeURIComponent(`artist:"${artist}" AND recording:"${title}"`);
+        const res = await fetch(
+            `https://musicbrainz.org/ws/2/recording/?query=${query}&fmt=json&limit=5`
+        );
+        if (!res.ok) return 0;
+        const data = await res.json();
+        const recording = (data?.recordings || []).find(r => r.length > 0);
+        if (recording?.length) {
+            return Math.floor(recording.length / 1000);
+        }
+        return 0;
+    } catch {
+        return 0;
+    }
+};
+
 const fetchFallbackDuration = async (artist, title) => {
     if (!artist || !title) return 0;
     const key = `${artist}-${title}`;
@@ -255,17 +288,14 @@ const fetchFallbackDuration = async (artist, title) => {
 
     const promise = (async () => {
         try {
-            const query = encodeURIComponent(`${artist} ${title}`);
-            const res = await fetch(`https://itunes.apple.com/search?term=${query}&entity=song&limit=1`);
-            if (!res.ok) return 0;
-            const data = await res.json();
-            if (data?.results?.[0]?.trackTimeMillis) {
-                const durationSeconds = Math.floor(data.results[0].trackTimeMillis / 1000);
-                fallbackDurationCache.set(key, durationSeconds);
-                return durationSeconds;
+            const itunes = await fetchItunesDuration(artist, title);
+            if (itunes > 0) {
+                fallbackDurationCache.set(key, itunes);
+                return itunes;
             }
-            fallbackDurationCache.set(key, 0);
-            return 0;
+            const mb = await fetchMusicBrainzDuration(artist, title);
+            fallbackDurationCache.set(key, mb);
+            return mb;
         } catch {
             fallbackDurationCache.set(key, 0);
             return 0;
