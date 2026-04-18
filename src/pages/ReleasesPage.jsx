@@ -463,10 +463,6 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             if (!groups[key]) groups[key] = [];
             groups[key].push(r);
         });
-        const top3Genres = genreWeights
-            ? new Set([...genreWeights.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([g]) => g))
-            : null;
-
         return Object.entries(groups)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, items]) => {
@@ -477,14 +473,8 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     return (b._score ?? 0) - (a._score ?? 0);
                 });
                 return [date, sorted.slice(0, 5)];
-            })
-            .filter(([, items]) =>
-                items.some(r =>
-                    r.isForYou ||
-                    (r.isMightLike && top3Genres && r._genres?.some(g => top3Genres.has(g)))
-                )
-            );
-    }, [annotatedUpcoming, genreWeights]);
+            });
+    }, [annotatedUpcoming]);
 
     const formatDate = (isoDate) => {
         try {
