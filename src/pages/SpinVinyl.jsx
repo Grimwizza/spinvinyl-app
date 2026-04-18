@@ -240,6 +240,9 @@ const groupTracksBySide = (tracklist) => {
     return sides;
 };
 
+// ─── Lyrics Session Cache ────────────────────────────────────────
+const lyricsSessionCache = new Map();
+
 // ─── Track Duration Fallback ────────────────────────────────────
 const fallbackDurationCache = new Map();
 const inFlightDurationRequests = new Map();
@@ -766,11 +769,16 @@ const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlb
     }, [selectedSide, sides, elapsed]);
 
     const fetchLyricsWithFallback = useCallback(async (artist, title) => {
+        const cacheKey = `${artist}/${title}`;
+        if (lyricsSessionCache.has(cacheKey)) return lyricsSessionCache.get(cacheKey);
         try {
             const res = await fetch(`/api/lyrics?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
             if (res.ok) {
                 const data = await res.json();
-                if (data.lyrics) return data.lyrics;
+                if (data.lyrics) {
+                    lyricsSessionCache.set(cacheKey, data.lyrics);
+                    return data.lyrics;
+                }
             }
             return 'Lyrics not available for this track.';
         } catch (error) {
@@ -821,7 +829,10 @@ const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlb
             }
         });
 
-        return () => { mounted = false; };
+        return () => {
+            mounted = false;
+            lyricsFetchingRef.current = false;
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showLyrics, currentTrackInfo?.track?.title, details?.artist, fetchLyricsWithFallback]);
 
@@ -1094,9 +1105,9 @@ const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlb
                 </div>
             ) : (
                 /* --- Minimized Player --- */
-                <div className="now-spinning-overlay fixed bottom-0 left-0 right-0 sm:bottom-6 sm:left-auto sm:right-6 z-50 animate-slide-up sm:max-w-[320px] sm:w-full">
+                <div className="now-spinning-overlay fixed bottom-[calc(60px+env(safe-area-inset-bottom,0px)+8px)] left-2 right-2 sm:bottom-6 sm:left-auto sm:right-6 z-[110] animate-slide-up sm:max-w-[320px] sm:w-full">
                     <div
-                        className="relative rounded-t-2xl sm:rounded-2xl bg-gray-900/95 backdrop-blur-xl border-t sm:border border-white/10 shadow-2xl shadow-black/50 overflow-hidden cursor-pointer hover:bg-gray-800/95 transition-colors group"
+                        className="relative rounded-2xl bg-gray-900/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden cursor-pointer hover:bg-gray-800/95 transition-colors group"
                         onClick={() => setExpanded(true)}
                     >
                         {/* Close button */}
