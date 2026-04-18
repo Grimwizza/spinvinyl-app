@@ -1883,6 +1883,7 @@ export const SpinVinyl = () => {
                 <BarcodeScanner
                     onClose={() => setShowScanner(false)}
                     clearCollectionCache={clearCollectionCache}
+                    authUsername={authUsername}
                     onAddSuccess={(title) => {
                         setShowScanner(false);
                         setScanToast({ title });

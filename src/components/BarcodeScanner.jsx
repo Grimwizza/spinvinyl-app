@@ -1,23 +1,25 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, AlertCircle, Camera } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient.js';
 
 // ─── BarcodeScanner ───────────────────────────────────────────────────────────
-// Uses native BarcodeDetector API (Chrome/Android) for live scanning.
-// Falls back to a file-capture input + manual barcode entry for iOS/Firefox.
-export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionCache }) {
-    const videoRef = useRef(null);
-    const streamRef = useRef(null);
-    const animFrameRef = useRef(null);
-    const detectorRef = useRef(null);
+// Uses @zxing/browser BrowserMultiFormatReader for live camera UPC scanning.
+// Works on iOS Safari (14.3+) AND Android Chrome via getUserMedia + canvas decoding.
+// Falls back to manual barcode entry only (no file-upload fallback needed).
+export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionCache, authUsername }) {
+    const videoRef      = useRef(null);
+    const controlsRef   = useRef(null);   // ZXing IScannerControls { stop() }
+    const hasScannedRef = useRef(false);  // Guard: prevent double-firing searchByBarcode
 
     // 'init' | 'scanning' | 'searching' | 'results' | 'empty' | 'error' | 'unsupported'
-    const [phase, setPhase] = useState('init');
-    const [barcode, setBarcode] = useState('');
+    const [phase, setPhase]             = useState('init');
+    const [barcode, setBarcode]         = useState('');
     const [manualInput, setManualInput] = useState('');
-    const [results, setResults] = useState([]);
-    const [errorMsg, setErrorMsg] = useState('');
-    const [adding, setAdding] = useState(null);   // release id being added
-    const [added, setAdded] = useState({});        // { [id]: true }
+    const [results, setResults]         = useState([]);
+    const [errorMsg, setErrorMsg]       = useState('');
+    const [adding, setAdding]           = useState(null);   // release id being added
+    const [added, setAdded]             = useState({});     // { [id]: true }
+    const [upcSyncFailed, setUpcSyncFailed] = useState(false); // subtle Supabase warning
 
     // Body scroll lock
     useEffect(() => {
@@ -31,25 +33,25 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         };
     }, []);
 
-    // Cleanup camera on unmount
+    // Cleanup ZXing controls on unmount
     useEffect(() => {
         return () => stopCamera();
     }, []);
 
     const stopCamera = () => {
-        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(t => t.stop());
-            streamRef.current = null;
+        if (controlsRef.current) {
+            try { controlsRef.current.stop(); } catch { /* ignore */ }
+            controlsRef.current = null;
         }
     };
 
     const searchByBarcode = useCallback(async (code) => {
+        stopCamera();
         setPhase('searching');
         setBarcode(code);
         setErrorMsg('');
         try {
-            const res = await fetch(`/api/discogs?action=barcodeSearch&barcode=${encodeURIComponent(code)}`);
+            const res  = await fetch(`/api/discogs?action=barcodeSearch&barcode=${encodeURIComponent(code)}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Search failed');
             const items = data.results || [];
@@ -61,76 +63,54 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         }
     }, []);
 
-    // ── Live scanning via BarcodeDetector ────────────────────────────────────
+    // ── Live scanning via @zxing/browser ─────────────────────────────────────
+    // Dynamic import keeps ZXing (~500 KB) out of the initial app bundle.
+    // ZXing owns the video element's stream — no separate getUserMedia or video.play() needed.
     const startLiveScanning = useCallback(async () => {
-        if (!('BarcodeDetector' in window)) {
-            setPhase('unsupported');
-            return;
-        }
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-            });
-            streamRef.current = stream;
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                await videoRef.current.play();
-            }
+        hasScannedRef.current = false;
+        setPhase('init');
 
-            const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'];
-            // Filter to only formats the browser actually supports
-            const supported = await BarcodeDetector.getSupportedFormats();
-            const usable = formats.filter(f => supported.includes(f));
-            detectorRef.current = new BarcodeDetector({ formats: usable.length > 0 ? usable : formats });
+        try {
+            const { BrowserMultiFormatReader, NotFoundException } = await import('@zxing/browser');
+            const reader = new BrowserMultiFormatReader();
 
             setPhase('scanning');
 
-            const tick = async () => {
-                if (!videoRef.current || videoRef.current.readyState < 2) {
-                    animFrameRef.current = requestAnimationFrame(tick);
-                    return;
-                }
-                try {
-                    const barcodes = await detectorRef.current.detect(videoRef.current);
-                    if (barcodes.length > 0) {
-                        stopCamera();
-                        searchByBarcode(barcodes[0].rawValue);
-                        return;
+            const controls = await reader.decodeFromConstraints(
+                {
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width:  { ideal: 1280 },
+                        height: { ideal: 720 },
+                    },
+                },
+                videoRef.current,
+                (result, err) => {
+                    if (result && !hasScannedRef.current) {
+                        hasScannedRef.current = true;
+                        searchByBarcode(result.getText());
                     }
-                } catch { /* no barcode this frame */ }
-                animFrameRef.current = requestAnimationFrame(tick);
-            };
-            animFrameRef.current = requestAnimationFrame(tick);
+                    // NotFoundException fires every frame when no barcode is visible — this is normal, ignore it
+                    if (err && !(err instanceof NotFoundException)) {
+                        console.warn('[BarcodeScanner] ZXing decode error:', err);
+                    }
+                }
+            );
+
+            controlsRef.current = controls;
         } catch (e) {
-            if (e.name === 'NotAllowedError') {
-                setErrorMsg('Camera permission denied. Use manual entry below.');
-            } else {
-                setErrorMsg('Could not start camera: ' + e.message);
-            }
+            const msgs = {
+                NotAllowedError:      'Camera permission denied. Allow camera access in your browser settings, or enter the barcode manually below.',
+                PermissionDeniedError: 'Camera permission denied. Allow camera access in your browser settings, or enter the barcode manually below.',
+                NotFoundError:        'No camera found on this device. Enter the barcode manually below.',
+                DevicesNotFoundError: 'No camera found on this device. Enter the barcode manually below.',
+                NotReadableError:     'Camera is in use by another app. Close it and try again, or enter the barcode manually.',
+                TrackStartError:      'Camera is in use by another app. Close it and try again, or enter the barcode manually.',
+                OverconstrainedError: 'Camera does not support the required settings. Enter the barcode manually below.',
+            };
+            setErrorMsg(msgs[e.name] || `Could not start camera: ${e.message}`);
             setPhase('unsupported');
         }
-    }, [searchByBarcode]);
-
-    // ── File-based fallback ───────────────────────────────────────────────────
-    const handleFilePick = useCallback(async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // Try BarcodeDetector on the still image (works on Android even if live fails)
-        if ('BarcodeDetector' in window) {
-            try {
-                const img = await createImageBitmap(file);
-                const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] });
-                const codes = await detector.detect(img);
-                if (codes.length > 0) {
-                    searchByBarcode(codes[0].rawValue);
-                    return;
-                }
-            } catch { /* fall through to manual */ }
-        }
-        // Couldn't auto-detect — prompt manual entry
-        setErrorMsg('Barcode not detected in photo. Enter it manually below.');
-        setPhase('unsupported');
     }, [searchByBarcode]);
 
     // Auto-start on mount
@@ -139,12 +119,12 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     }, [startLiveScanning]);
 
     const handleRescan = () => {
-        setPhase('init');
         setBarcode('');
         setManualInput('');
         setResults([]);
         setErrorMsg('');
         setAdded({});
+        setUpcSyncFailed(false);
         startLiveScanning();
     };
 
@@ -155,12 +135,45 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         searchByBarcode(code);
     };
 
+    // ── Dual-write: Discogs (primary) + Supabase (secondary) ─────────────────
     const handleAdd = async (release) => {
         setAdding(release.id);
+        setUpcSyncFailed(false);
         try {
-            const res = await fetch(`/api/discogs?action=addToCollection&id=${release.id}`, { method: 'POST' });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to add to collection');
+            const discogsPromise = fetch(
+                `/api/discogs?action=addToCollection&id=${release.id}`,
+                { method: 'POST' }
+            ).then(async (res) => {
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to add to collection');
+                return data;
+            });
+
+            const supabasePromise = supabase
+                ? supabase.from('scanned_upcs').insert({
+                    upc:              barcode,
+                    discogs_username: authUsername || null,
+                    release_id:       String(release.id),
+                    release_title:    release.title,
+                  }).then(({ error }) => { if (error) throw error; })
+                : Promise.resolve();
+
+            const [discogsResult, supabaseResult] = await Promise.allSettled([
+                discogsPromise,
+                supabasePromise,
+            ]);
+
+            // Discogs is primary — failure surfaces as an error to the user
+            if (discogsResult.status === 'rejected') {
+                throw new Error(discogsResult.reason?.message || 'Failed to add to collection');
+            }
+
+            // Supabase is secondary — failure shows a subtle warning, never blocks
+            if (supabaseResult.status === 'rejected') {
+                console.warn('[BarcodeScanner] Supabase write failed:', supabaseResult.reason);
+                setUpcSyncFailed(true);
+            }
+
             setAdded(prev => ({ ...prev, [release.id]: true }));
             clearCollectionCache?.();
             onAddSuccess?.(release.title);
@@ -204,7 +217,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
                 {phase === 'scanning' && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        {/* Dim overlay with cutout effect */}
+                        {/* Dim overlay */}
                         <div className="absolute inset-0"
                              style={{ background: 'rgba(0,0,0,0.45)' }} />
                         {/* Scan box */}
@@ -232,7 +245,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     </div>
                 )}
 
-                {/* Unsupported / camera failed — show camera placeholder */}
+                {/* Camera failed — show placeholder */}
                 {phase === 'unsupported' && (
                     <div className="absolute inset-0 flex items-center justify-center bg-gray-950">
                         <Camera size={48} className="text-gray-700" />
@@ -256,6 +269,13 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                 {phase === 'error' && <span className="text-red-400">{errorMsg}</span>}
                                 {phase === 'unsupported' && (errorMsg || 'Live scanning not available — enter barcode manually')}
                             </p>
+                            {/* Subtle warning: Discogs write succeeded but Supabase sync failed */}
+                            {upcSyncFailed && (
+                                <p className="text-[11px] text-amber-500/70 mt-1 flex items-center gap-1">
+                                    <AlertCircle size={10} />
+                                    UPC log sync failed — record was added to your Discogs collection
+                                </p>
+                            )}
                         </div>
                         <button
                             onClick={handleRescan}
@@ -281,9 +301,9 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     {phase === 'results' && (
                         <div className="overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: 'touch' }}>
                             {results.map(r => {
-                                const isAdded = added[r.id];
+                                const isAdded  = added[r.id];
                                 const isAdding = adding === r.id;
-                                const thumb = (r.cover_image && !r.cover_image.includes('spacer')) ? r.cover_image : null;
+                                const thumb    = (r.cover_image && !r.cover_image.includes('spacer')) ? r.cover_image : null;
                                 return (
                                     <div key={r.id} className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.04]">
                                         {thumb ? (
@@ -321,25 +341,9 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         </div>
                     )}
 
-                    {/* Empty / Error — show manual entry */}
+                    {/* Empty / Error / Unsupported — manual entry only */}
                     {(phase === 'empty' || phase === 'error' || phase === 'unsupported') && (
                         <div className="px-4 pt-4 pb-6 flex flex-col gap-4">
-                            {/* File capture button (iOS / fallback) */}
-                            {phase === 'unsupported' && (
-                                <label className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300 font-medium active:opacity-70 cursor-pointer min-h-[44px]">
-                                    <Camera size={16} />
-                                    <span>Take a Photo of the Barcode</span>
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        capture="environment"
-                                        className="sr-only"
-                                        onChange={handleFilePick}
-                                    />
-                                </label>
-                            )}
-
-                            {/* Manual entry */}
                             <form onSubmit={handleManualSubmit} className="flex flex-col gap-3">
                                 <p className="text-xs text-gray-500">Or enter the barcode number manually:</p>
                                 <div className="flex gap-2">
@@ -359,11 +363,6 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                         Search
                                     </button>
                                 </div>
-                                {phase === 'unsupported' && (
-                                    <p className="text-[11px] text-gray-600">
-                                        💡 iPhone tip: open the Camera app, point at the barcode — it'll show a link you can look up.
-                                    </p>
-                                )}
                             </form>
                         </div>
                     )}

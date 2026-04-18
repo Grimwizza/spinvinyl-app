@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.103.2",
     "@vercel/analytics": "^1.4.0",
+    "@zxing/browser": "^0.1.5",
     "cheerio": "^1.2.0",
     "cookie": "^1.1.1",
     "dotenv": "^17.3.1",
