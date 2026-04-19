@@ -419,10 +419,14 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         setError(null);
         try {
             const res = await fetch('/api/upcoming');
-            const data = res.ok ? await res.json() : { releases: [] };
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                setError(data.error || 'Failed to load upcoming releases. Try refreshing.');
+                return;
+            }
             const list = Array.isArray(data.releases) ? data.releases : [];
             setUpcoming(list);
-            if (list.length > 0) writeCache(CACHE_KEYS.releases, { upcoming: list });
+            if (list.length > 0) writeCache(CACHE_KEYS.releases, { upcoming: list, fallback: data.fallback ?? false });
         } catch {
             setError('Failed to load upcoming releases. Try refreshing.');
         } finally {
@@ -473,7 +477,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     if (pa !== pb) return pa - pb;
                     return (b._score ?? 0) - (a._score ?? 0);
                 });
-                return [date, sorted.slice(0, 5)];
+                return [date, sorted];
             });
     }, [annotatedUpcoming]);
 
@@ -616,6 +620,13 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 <div className="text-center py-12 text-gray-500 text-sm">
                     <Disc3 size={36} className="mx-auto mb-3 opacity-20" />
                     <p>No upcoming releases found.</p>
+                </div>
+            )}
+
+            {/* No personalized matches nudge */}
+            {!loading && !error && annotatedUpcoming.length > 0 && !annotatedUpcoming.some(r => r.isForYou || r.isMightLike) && (
+                <div className="mb-4 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-gray-500">
+                    No artist or genre matches found in your collection — add more records to personalise this list.
                 </div>
             )}
 

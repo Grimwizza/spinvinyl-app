@@ -483,6 +483,36 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
     // Get artist bio (from Wikipedia)
     const artistBio = artistInfo?.bio || '';
 
+    const creditsByRole = (() => {
+        if (!detail?.extraartists?.length) return null;
+        const TARGET_ROLES = ['produced', 'engineer', 'mix', 'master'];
+        const ROLE_LABELS = { produced: 'Produced By', engineer: 'Engineer', mix: 'Mixed By', master: 'Mastering' };
+        const map = {};
+        detail.extraartists.forEach(({ name, role }) => {
+            if (!role || !name) return;
+            role.split(',').map(s => s.trim().toLowerCase()).forEach(seg => {
+                const key = TARGET_ROLES.find(r => seg.includes(r));
+                if (!key) return;
+                if (!map[key]) map[key] = { label: ROLE_LABELS[key], names: [] };
+                if (!map[key].names.includes(name)) map[key].names.push(name);
+            });
+        });
+        const ordered = TARGET_ROLES.filter(k => map[k]).map(k => map[k]);
+        return ordered.length ? ordered : null;
+    })();
+
+    // Avoids UTC-shift bug with bare ISO strings
+    const formattedDate = (() => {
+        const raw = detail?.released;
+        if (!raw) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            const [y, m, d] = raw.split('-').map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        if (/^\d{4}$/.test(raw)) return raw;
+        return raw;
+    })();
+
     return (
         <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center" onClick={onClose}>
             {/* Backdrop */}
@@ -632,18 +662,76 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                                 </div>
                             )}
 
-                            {/* Album Notes */}
-                            {albumNotes && (
+                            {/* About This Release */}
+                            {(albumNotes || formattedDate || detail?.country || detail?.labels?.length > 0 ||
+                              detail?.formats?.[0]?.descriptions?.length > 0 || creditsByRole ||
+                              detail?.community?.have > 0 || detail?.community?.want > 0) && (
                                 <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
-                                    <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex items-center gap-2 mb-3">
                                         <Music2 size={14} className="text-pink-400" />
                                         <span className="text-xs font-semibold uppercase tracking-wider text-pink-400">About This Release</span>
                                     </div>
-                                    <p className="text-sm text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-line">
-                                        {albumNotes}
-                                    </p>
+
+                                    {albumNotes && (
+                                        <p className="text-sm text-gray-400 leading-relaxed line-clamp-6 whitespace-pre-line mb-3">
+                                            {albumNotes}
+                                        </p>
+                                    )}
+
+                                    {(detail?.country || formattedDate || (detail?.labels?.[0]?.catno && detail.labels[0].catno !== 'none') || detail?.formats?.[0]?.descriptions?.length > 0) && (
+                                        <div className="mt-2 mb-3">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Release Details</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {detail.country && (
+                                                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/5 text-gray-400">{detail.country}</span>
+                                                )}
+                                                {formattedDate && (
+                                                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/5 text-gray-400">{formattedDate}</span>
+                                                )}
+                                                {detail?.labels?.[0]?.catno && detail.labels[0].catno !== 'none' && (
+                                                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.03] border border-white/5 text-gray-400 font-mono">{detail.labels[0].catno}</span>
+                                                )}
+                                                {(detail?.formats?.[0]?.descriptions || []).map(desc => (
+                                                    <span key={desc} className="text-[11px] px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300">{desc}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {creditsByRole && (
+                                        <div className="mt-2 mb-3">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">Credits</p>
+                                            <div className="space-y-1">
+                                                {creditsByRole.map(({ label, names }) => (
+                                                    <div key={label} className="flex gap-2 items-baseline">
+                                                        <span className="text-[10px] text-gray-500 w-20 flex-shrink-0">{label}</span>
+                                                        <span className="text-[11px] text-gray-300">{names.join(', ')}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(detail?.community?.have > 0 || detail?.community?.want > 0) && (
+                                        <div className="mt-2 mb-3">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">In the Wild</p>
+                                            <div className="flex gap-3">
+                                                {detail.community.have > 0 && (
+                                                    <span className="text-[11px] text-gray-400">
+                                                        <span className="font-semibold text-gray-200">{detail.community.have.toLocaleString()}</span> own it
+                                                    </span>
+                                                )}
+                                                {detail.community.want > 0 && (
+                                                    <span className="text-[11px] text-gray-400">
+                                                        <span className="font-semibold text-gray-200">{detail.community.want.toLocaleString()}</span> want it
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {detail?.uri && (
-                                        <div className="flex flex-col gap-1 mt-4 border-t border-white/5 pt-3">
+                                        <div className="flex flex-col gap-1 mt-3 border-t border-white/5 pt-3">
                                             <a
                                                 href={`https://www.discogs.com${detail.uri}`}
                                                 target="_blank"
