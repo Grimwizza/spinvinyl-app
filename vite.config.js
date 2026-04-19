@@ -21,6 +21,7 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 1000,
       commonjsOptions: {
         include: [/react-leaflet-cluster/, /node_modules/],
+        transformMixedEsModules: true,
       },
     },
   }
