@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode } from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode, ScanText } from 'lucide-react';
 import { recordSession, getStoredStats } from '../lib/statsEngine.js';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import BadgeToast from '../components/BadgeToast.jsx';
@@ -7,6 +7,7 @@ import AchievementsPage from './AchievementsPage.jsx';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
+import MatrixScanner from '../components/MatrixScanner.jsx';
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -1258,6 +1259,7 @@ export const SpinVinyl = () => {
     // ─── Gamification State ──────────────────────────────────────
     const [activePage, setActivePage] = useState('collection'); // 'collection' | 'achievements' | 'stats'
     const [showScanner, setShowScanner] = useState(false);
+    const [showMatrixScanner, setShowMatrixScanner] = useState(false);
     const [scanToast, setScanToast] = useState(null); // { title } for 3s
     const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
 
@@ -1633,6 +1635,14 @@ export const SpinVinyl = () => {
                                 <Barcode size={18} className="group-hover:rotate-3 transition-transform" />
                                 <span>Scan Barcode</span>
                             </button>
+                            {/* Scan Matrix Number */}
+                            <button
+                                onClick={() => setShowMatrixScanner(true)}
+                                className="flex items-center justify-center gap-2 px-6 py-2.5 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-sm sm:text-base font-bold shadow-lg shadow-amber-500/25 transition-all hover:scale-[1.03] active:scale-[0.97] min-h-[44px] w-full sm:w-fit group"
+                            >
+                                <ScanText size={18} className="group-hover:rotate-3 transition-transform" />
+                                <span>Scan Matrix</span>
+                            </button>
                         </div>
                     </div>
 
@@ -1943,6 +1953,19 @@ export const SpinVinyl = () => {
                     authUsername={authUsername}
                     onAddSuccess={(title) => {
                         setShowScanner(false);
+                        setScanToast({ title });
+                        setTimeout(() => setScanToast(null), 3500);
+                    }}
+                />
+            )}
+            {/* Matrix number scanner modal */}
+            {showMatrixScanner && (
+                <MatrixScanner
+                    onClose={() => setShowMatrixScanner(false)}
+                    clearCollectionCache={clearCollectionCache}
+                    authUsername={authUsername}
+                    onAddSuccess={(title) => {
+                        setShowMatrixScanner(false);
                         setScanToast({ title });
                         setTimeout(() => setScanToast(null), 3500);
                     }}

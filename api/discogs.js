@@ -7,6 +7,19 @@ dotenv.config();
 const DISCOGS_BASE = 'https://api.discogs.com';
 const USER_AGENT = 'SpinVinyl/1.0 +https://aimlow.ai';
 
+async function discogsRateLimitedFetch(url, options, maxRetries = 3) {
+    let delay = 500;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const response = await fetch(url, options);
+        if (response.status !== 429) return response;
+        if (attempt === maxRetries) return response;
+        const retryAfter = response.headers.get('Retry-After');
+        const waitMs = retryAfter ? parseInt(retryAfter, 10) * 1000 : delay;
+        await new Promise(r => setTimeout(r, waitMs));
+        delay *= 2;
+    }
+}
+
 // Initialize OAuth
 const oauth = OAuth({
     consumer: {
@@ -302,6 +315,14 @@ export default async function handler(req, res) {
             apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(q)}&type=release&format=Vinyl&per_page=3`;
             break;
         }
+        case 'matrixSearch': {
+            const matrixQ = url.searchParams.get('q') || req.query?.q || '';
+            if (!matrixQ) return res.status(400).json({ error: 'Missing query parameter q' });
+            const cleaned = matrixQ.trim().replace(/[^\w\s\-\/]/g, '').replace(/\s+/g, ' ').slice(0, 80);
+            if (!cleaned) return res.status(400).json({ error: 'Query empty after cleaning' });
+            apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(cleaned)}&type=release&per_page=10&page=1`;
+            break;
+        }
         case 'addToWantlist': {
             // Add a release to the user’s Discogs Wantlist
             if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
@@ -432,7 +453,7 @@ export default async function handler(req, res) {
 
     try {
         const authHeader = oauth.toHeader(oauth.authorize(requestData, userToken));
-        const response = await fetch(apiUrl, {
+        const response = await discogsRateLimitedFetch(apiUrl, {
             method: apiMethod,
             headers: {
                 ...authHeader,
