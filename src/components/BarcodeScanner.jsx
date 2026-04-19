@@ -218,11 +218,13 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     };
 
     const isPreResults = ['init', 'scanning'].includes(phase);
+    const isEditDetails = phase === 'editDetails';
 
     return (
         <div className="fixed inset-0 z-[200] flex flex-col bg-black">
 
             {/* ── Header ── */}
+            {!isEditDetails && (
             <div
                 className="flex items-center justify-between px-4 pb-3 bg-black/80 backdrop-blur border-b border-white/10 flex-shrink-0"
                 style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}
@@ -238,9 +240,10 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     <X size={20} className="text-white" />
                 </button>
             </div>
+            )}
 
             {/* ── Camera viewfinder ── */}
-            <div className="relative bg-black overflow-hidden" style={{ flex: isPreResults ? 1 : '0 0 40vh' }}>
+            <div className="relative bg-black overflow-hidden" style={{ flex: isPreResults ? 1 : '0 0 0px', display: isEditDetails ? 'none' : undefined }}>
                 <video
                     ref={videoRef}
                     className="absolute inset-0 w-full h-full object-cover"
@@ -288,7 +291,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
             {/* ── Bottom panel ── */}
             <div className="bg-gray-950 border-t border-white/10 flex flex-col flex-shrink-0"
-                 style={{ maxHeight: isPreResults ? '0' : '60vh', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
+                 style={{ maxHeight: (isPreResults || isEditDetails) ? '0' : '60vh', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
 
                 {/* Panel header */}
                 {!isPreResults && (
@@ -371,7 +374,8 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     {phase === 'editDetails' && selectedRelease && (
                         <div className="flex flex-col h-full bg-black">
                             {/* Header */}
-                            <div className="flex items-center justify-between px-4 py-4 bg-gray-950 border-b border-white/5">
+                            <div className="flex items-center justify-between px-4 py-4 bg-gray-950 border-b border-white/5"
+                                 style={{ paddingTop: 'max(16px, env(safe-area-inset-top))' }}>
                                 <button onClick={() => setPhase('results')} className="text-sm font-semibold text-gray-400 hover:text-white transition-colors">Cancel</button>
                                 <h3 className="text-white font-bold text-[15px]">Edit Details</h3>
                                 <div className="w-[45px]"></div>
