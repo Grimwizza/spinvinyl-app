@@ -3,13 +3,8 @@ import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, Refre
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
-import _MarkerClusterGroup from 'react-leaflet-cluster';
-// CJS interop: Rollup may hand us { default: Ctor } instead of Ctor directly
-const MarkerClusterGroup = _MarkerClusterGroup?.default ?? _MarkerClusterGroup;
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'react-leaflet-cluster/lib/assets/MarkerCluster.css';
-import 'react-leaflet-cluster/lib/assets/MarkerCluster.Default.css';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -2085,7 +2080,6 @@ const ShopLocalSection = () => {
                         <Marker position={[location.lat, location.lng]} icon={createUserLocationIcon()}>
                             <Popup><span style={{ fontSize: 12 }}>Your location</span></Popup>
                         </Marker>
-                        <MarkerClusterGroup chunkedLoading>
                             {sortedShops.map(shop => (
                                 <Marker
                                     key={shop.id}
@@ -2101,7 +2095,6 @@ const ShopLocalSection = () => {
                                     </Popup>
                                 </Marker>
                             ))}
-                        </MarkerClusterGroup>
                         <MapBoundsController shops={sortedShops} />
                         <MapPanController shop={selectedShop} />
                     </MapContainer>
