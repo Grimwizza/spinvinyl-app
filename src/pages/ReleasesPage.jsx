@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map, Lock } from 'lucide-react';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
@@ -2215,14 +2215,14 @@ const ShopLocalSection = () => {
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
-    { id: 'vinylNews', label: 'Vinyl News', icon: Newspaper },
-    { id: 'newReleases', label: 'Upcoming Releases', icon: Disc3 },
-    { id: 'completeCollection', label: 'Complete Collection', icon: Library },
-    { id: 'wantlist', label: 'Wantlist', icon: Heart },
-    { id: 'shopLocal', label: 'Shop Local', icon: Store },
+    { id: 'vinylNews',          label: 'Vinyl News',          icon: Newspaper, requiresAuth: false },
+    { id: 'newReleases',        label: 'Upcoming Releases',   icon: Disc3,     requiresAuth: false },
+    { id: 'completeCollection', label: 'Complete Collection', icon: Library,   requiresAuth: true  },
+    { id: 'wantlist',           label: 'Wantlist',            icon: Heart,     requiresAuth: true  },
+    { id: 'shopLocal',          label: 'Shop Local',          icon: Store,     requiresAuth: false },
 ];
 
-const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
+const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticated = true, onRequireLogin }) => {
     const [activeTab, setActiveTab] = useState('vinylNews');
 
     const switchTab = (id) => {
@@ -2271,6 +2271,16 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
             <div className="relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,0.12),transparent_60%)]" />
                 <div className="relative max-w-3xl mx-auto px-4 pt-10 pt-safe-header pb-5 text-center">
+                    {!isAuthenticated && (
+                        <div className="flex justify-end mb-3">
+                            <a
+                                href="/api/discogs?action=login"
+                                className="text-xs font-bold text-violet-300 border border-violet-500/30 rounded-full px-3 py-1.5 hover:bg-violet-500/10 transition-colors"
+                            >
+                                Sign in
+                            </a>
+                        </div>
+                    )}
                     <div className="flex items-center justify-center gap-3 mb-2">
                         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-xl">
                             <Compass size={24} className="text-white" />
@@ -2280,7 +2290,9 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
                         </h1>
                     </div>
                     <p className="text-gray-500 text-sm">
-                        Personalized experience, curated from your collection
+                        {isAuthenticated
+                            ? 'Personalized experience, curated from your collection'
+                            : 'News, new releases, and local shops — no account needed'}
                     </p>
                 </div>
             </div>
@@ -2288,20 +2300,26 @@ const ReleasesPage = ({ releases = [], collectionLoading = false }) => {
             {/* Sub-tab pills */}
             <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 bg-gray-950/80 backdrop-blur-xl border-b border-white/5">
                 <div className="max-w-3xl mx-auto px-4 flex gap-1 py-2 overflow-x-auto no-scrollbar">
-                    {TABS.map(tab => (
+                    {TABS.map(tab => {
+                        const isLocked = tab.requiresAuth && !isAuthenticated;
+                        return (
                         <button
                             key={tab.id}
-                            onClick={() => switchTab(tab.id)}
+                            onClick={() => isLocked ? onRequireLogin?.() : switchTab(tab.id)}
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${
                                 activeTab === tab.id
                                     ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                                    : 'text-gray-500 hover:text-gray-300 border border-transparent hover:border-white/10'
+                                    : isLocked
+                                        ? 'text-gray-600 border border-transparent'
+                                        : 'text-gray-500 hover:text-gray-300 border border-transparent hover:border-white/10'
                             }`}
                         >
                             <tab.icon size={12} />
                             {tab.label}
+                            {isLocked && <Lock size={10} className="opacity-60" />}
                         </button>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 

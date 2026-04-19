@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode} from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode, Lock} from 'lucide-react';
 import { recordSession, getStoredStats } from '../lib/statsEngine.js';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import BadgeToast from '../components/BadgeToast.jsx';
@@ -1339,6 +1339,8 @@ export const SpinVinyl = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [authUsername, setAuthUsername] = useState('');
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+    const [isGuestMode, setIsGuestMode] = useState(false);
+    const [showGuestModal, setShowGuestModal] = useState(false);
 
     // View & Sort State
     const [viewMode, setViewMode] = useState(() => localStorage.getItem('vinylView') || 'grid');
@@ -1618,7 +1620,7 @@ export const SpinVinyl = () => {
         );
     }
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !isGuestMode) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white flex items-center justify-center p-6 relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)] pointer-events-none" />
@@ -1653,6 +1655,13 @@ export const SpinVinyl = () => {
                     <p className="text-xs text-gray-500 mt-6">
                         Read-only access to view your collection.
                     </p>
+
+                    <button
+                        onClick={() => { setIsGuestMode(true); setActivePage('releases'); }}
+                        className="mt-4 text-sm text-gray-500 hover:text-gray-300 transition-colors underline underline-offset-4"
+                    >
+                        Continue without signing in
+                    </button>
                 </div>
             </div>
         );
@@ -1669,7 +1678,12 @@ export const SpinVinyl = () => {
                 <StatsPage collectionCount={totalItems} />
             )}
             {activePage === 'releases' && (
-                <ReleasesPage releases={releases} collectionLoading={loading} />
+                <ReleasesPage
+                    releases={releases}
+                    collectionLoading={loading}
+                    isAuthenticated={isAuthenticated}
+                    onRequireLogin={() => setShowGuestModal(true)}
+                />
             )}
             {/* Collection page (always rendered, hidden when other tab active) */}
             <div className={activePage !== 'collection' ? 'hidden' : ''}>
@@ -1951,30 +1965,38 @@ export const SpinVinyl = () => {
             <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-gray-950/95 backdrop-blur-xl border-t border-white/10 pb-[env(safe-area-inset-bottom,0px)]">
                 <div className="flex items-stretch max-w-lg mx-auto h-[60px]">
                     {[
-                        { id: 'collection', label: 'Collection', icon: Disc },
-                        { id: 'releases', label: 'Explore', icon: Compass },
-                        { id: 'achievements', label: 'Badges', icon: Trophy },
-                        { id: 'stats', label: 'Stats', icon: BarChart2 },
-                    ].map(tab => (
+                        { id: 'collection', label: 'Collection', icon: Disc, requiresAuth: true },
+                        { id: 'releases', label: 'Explore', icon: Compass, requiresAuth: false },
+                        { id: 'achievements', label: 'Badges', icon: Trophy, requiresAuth: true },
+                        { id: 'stats', label: 'Stats', icon: BarChart2, requiresAuth: true },
+                    ].map(tab => {
+                        const isLocked = isGuestMode && tab.requiresAuth;
+                        return (
                         <button
                             key={tab.id}
-                            onClick={() => setActivePage(tab.id)}
+                            onClick={() => isLocked ? setShowGuestModal(true) : setActivePage(tab.id)}
                             className={`relative flex-1 flex flex-col items-center justify-center gap-1 transition-all active:opacity-70 active:scale-95 ${
                                 activePage === tab.id
                                     ? 'text-violet-400'
-                                    : 'text-gray-500 hover:text-gray-300'
+                                    : isLocked ? 'text-gray-600' : 'text-gray-500 hover:text-gray-300'
                             }`}
                         >
                             {activePage === tab.id && (
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-violet-500 to-pink-500 rounded-full" />
                             )}
-                            <tab.icon
-                                size={22}
-                                className={activePage === tab.id ? 'drop-shadow-[0_0_8px_rgba(167,139,250,0.7)]' : ''}
-                            />
+                            <div className="relative">
+                                <tab.icon
+                                    size={22}
+                                    className={activePage === tab.id ? 'drop-shadow-[0_0_8px_rgba(167,139,250,0.7)]' : ''}
+                                />
+                                {isLocked && (
+                                    <Lock size={10} className="absolute -top-1 -right-2 text-gray-500" />
+                                )}
+                            </div>
                             <span className="text-[10px] font-semibold tracking-wide">{tab.label}</span>
                         </button>
-                    ))}
+                        );
+                    })}
                 </div>
             </nav>
 
@@ -2063,6 +2085,36 @@ export const SpinVinyl = () => {
                         setTimeout(() => setScanToast(null), 3500);
                     }}
                 />
+            )}
+
+            {/* Guest sign-in bottom sheet */}
+            {showGuestModal && (
+                <div className="fixed inset-0 z-[200] flex items-end">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowGuestModal(false)} />
+                    <div className="relative w-full bg-gray-900 border-t border-white/10 rounded-t-2xl p-6 flex flex-col items-center gap-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+                        <div className="w-10 h-1 bg-white/20 rounded-full" />
+                        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-xl">
+                            <Disc3 size={28} className="text-white" />
+                        </div>
+                        <h2 className="text-xl font-black text-white">Connect Discogs</h2>
+                        <p className="text-gray-400 text-sm text-center max-w-xs">
+                            Sign in to access your collection, badges, stats, and more personalised features.
+                        </p>
+                        <a
+                            href="/api/discogs?action=login"
+                            className="w-full flex items-center justify-center gap-3 py-3 px-6 bg-white text-black rounded-xl font-bold hover:bg-gray-100 transition-all"
+                        >
+                            <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                                <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 3.3c4.805 0 8.7 3.895 8.7 8.7 0 4.805-3.895 8.7-8.7 8.7-4.805 0-8.7-3.895-8.7-8.7 0-4.805 3.895-8.7 8.7-8.7z" />
+                                <path d="M14.54 13.06c0-1.04-.62-1.74-1.66-1.74H10.1v3.48h2.78c1.04 0 1.66-.7 1.66-1.74zm-2.82.7h-1.62v-1.4h1.62c.48 0 .68.2.68.7s-.2.7-.68.7zm5.94-.7c0 1.76-1.22 2.84-2.92 2.84H8V9.9h6.74c1.7 0 2.92 1.08 2.92 2.84zm-1.16 0c0-1.04-.62-1.74-1.66-1.74h-2.78v3.48h2.78c1.04 0 1.66-.7 1.66-1.74z" />
+                            </svg>
+                            Connect to Discogs
+                        </a>
+                        <button onClick={() => setShowGuestModal(false)} className="text-gray-500 text-sm hover:text-gray-300 transition-colors">
+                            Continue as guest
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );
