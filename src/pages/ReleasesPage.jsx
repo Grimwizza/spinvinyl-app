@@ -11,7 +11,7 @@ import 'leaflet/dist/leaflet.css';
 const CACHE_KEYS = {
     releases: 'spinvinyl_releases_cache',
     news: 'spinvinyl_news_cache',
-    gaps: 'spinvinyl_gaps_cache',
+    gaps: 'spinvinyl_gaps_cache_v3',
     wantlist: 'spinvinyl_wantlist_cache',
 };
 const TTL = { releases: 6, news: 4, gaps: 12, wantlist: 1 }; // hours
@@ -128,8 +128,10 @@ const normalizeArtist = (name) =>
 
 // Strip edition/pressing qualifiers so "Whirlwind Deluxe" and "Whirlwind" compare equal.
 const normalizeTitle = (title) => {
+    // Remove parenthetical/bracketed edition markers: (Deluxe Edition), [Remastered], etc.
     const inParens = /\s*[\(\[][^)\]]*\b(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited|edition|version|mix)\b[^)\]]*[\)\]]/gi;
-    const trailing = /\s+(?:super\s+)?(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited)(?:\s+(?:edition|version))?\s*$/i;
+    // Remove trailing edition words, optionally preceded by a separator: "Deluxe", "- Deluxe Edition", ": Remastered"
+    const trailing = /[\s:–—-]+(?:super\s+)?(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited)(?:\s+(?:edition|version))?\s*$/i;
     return (title || '')
         .toLowerCase()
         .replace(inParens, '')
@@ -1363,6 +1365,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
             if (cached) { setGaps(cached); return; }
         }
         if (!collectionArtists.length) return;
+        const runId = ++fetchRunRef.current;
         setLoading(true);
         setError(null);
         setGaps([]);
@@ -1376,6 +1379,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         const gapData = [];
 
         for (const artist of topArtists) {
+            if (fetchRunRef.current !== runId) return; // newer fetch started
             try {
                 // Fetch master releases for this artist via search API.
                 // Masters are deduplicated canonical albums — one entry per album regardless
@@ -1392,11 +1396,17 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     await new Promise(r => setTimeout(r, 300));
                 }
 
-                // Filter to album-length releases only (exclude Singles, EPs).
-                // Discogs search returns r.format as an array of strings e.g. ["Vinyl","LP","Album"]
+                // Keep only studio albums: must include "album" or "lp" AND must not be
+                // a compilation, live recording, promo, DJ mix, or other minor release type.
+                const MINOR_FORMATS = new Set([
+                    'single','ep','7"','12"','compilation','live','mixtape/dj mix',
+                    'dj mix','promo','promotional','unofficial release','test pressing','box set',
+                ]);
                 const albumMasters = allMasters.filter(r => {
                     const fmts = (r.format || []).map(f => f.toLowerCase());
-                    return !fmts.some(f => f === 'single' || f === 'ep' || f === '7"');
+                    const isAlbum = fmts.some(f => f === 'album' || f === 'lp');
+                    const isMinor = fmts.some(f => MINOR_FORMATS.has(f));
+                    return isAlbum && !isMinor;
                 });
 
                 if (albumMasters.length === 0) {
@@ -1414,9 +1424,16 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
 
                 // Exact master ID match → owned
                 const isOwned = (r) => ownedMasterIds.has(String(r.id));
+                // Discogs search titles are prefixed "Artist Name - Album Title"; strip it for comparison
+                // against collection titles which are stored as plain album titles.
+                const artistPrefix = artist.name.toLowerCase() + ' - ';
+                const albumTitle = (r) => {
+                    const lower = (r.title || '').toLowerCase();
+                    return lower.startsWith(artistPrefix) ? r.title.slice(artistPrefix.length) : r.title;
+                };
                 // Different pressing/edition of an album already in collection → alternate
                 const artistOwnedTitles = ownedTitlesByArtist.get(String(artist.id)) || new Set();
-                const isAlternate = (r) => !isOwned(r) && artistOwnedTitles.has(normalizeTitle(r.title));
+                const isAlternate = (r) => !isOwned(r) && artistOwnedTitles.has(normalizeTitle(albumTitle(r)));
 
                 const owned = uniqueMasters.filter(isOwned);
                 const alternates = uniqueMasters.filter(isAlternate);
@@ -1437,6 +1454,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
             await new Promise(r => setTimeout(r, 150));
         }
 
+        if (fetchRunRef.current !== runId) return; // superseded
         writeCache(CACHE_KEYS.gaps, gapData);
         setLoading(false);
 
@@ -1446,6 +1464,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         }
     }, [collectionArtists, ownedMasterIds, ownedTitlesByArtist]);
 
+    const fetchRunRef = React.useRef(0);
     const prevCollectionLoadingRef = React.useRef(collectionLoading);
     useEffect(() => {
         const wasLoading = prevCollectionLoadingRef.current;

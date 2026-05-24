@@ -298,7 +298,7 @@ export default async function handler(req, res) {
             const amArtist = url.searchParams.get('artist') || req.query?.artist || '';
             if (!amArtist) return res.status(400).json({ error: 'Missing artist name' });
             const amPage = url.searchParams.get('page') || '1';
-            apiUrl = `${DISCOGS_BASE}/database/search?artist=${encodeURIComponent(amArtist)}&type=master&per_page=100&page=${amPage}`;
+            apiUrl = `${DISCOGS_BASE}/database/search?artist=${encodeURIComponent(amArtist)}&type=master&format=Vinyl&per_page=100&page=${amPage}`;
             break;
         }
         case 'newReleases': {
