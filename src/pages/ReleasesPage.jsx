@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map, Lock } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock } from 'lucide-react';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
@@ -125,6 +125,18 @@ const normalizeArtist = (name) =>
         .replace(/[^a-z0-9\s]/g, '')
         .replace(/\s+/g, ' ')
         .trim();
+
+// Strip edition/pressing qualifiers so "Whirlwind Deluxe" and "Whirlwind" compare equal.
+const normalizeTitle = (title) => {
+    const inParens = /\s*[\(\[][^)\]]*\b(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited|edition|version|mix)\b[^)\]]*[\)\]]/gi;
+    const trailing = /\s+(?:super\s+)?(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited)(?:\s+(?:edition|version))?\s*$/i;
+    return (title || '')
+        .toLowerCase()
+        .replace(inParens, '')
+        .replace(trailing, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
 
 // Try to identify whether a release entry mentions any of the user's artists.
 // upcomingvinyl.com rows are "Artist Name Album Title" — we don't have a clean separator,
@@ -1334,9 +1346,10 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
     );
 };
 
-const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collectionLoading }) => {
+const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTitlesByArtist, collectionLoading }) => {
     const [gaps, setGaps] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [progress, setProgress] = useState({ done: 0, total: 0 });
     const [error, setError] = useState(null);
     const [expandedArtists, setExpandedArtists] = useState(new Set());
     const [wantlistState, setWantlistState] = useState({}); // { [releaseId]: 'pending' | 'done' | 'error' }
@@ -1352,12 +1365,14 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
         if (!collectionArtists.length) return;
         setLoading(true);
         setError(null);
+        setGaps([]);
         clearCache(CACHE_KEYS.gaps);
 
-        // Exclude "Various" artists; take enough candidates to reliably get 10 results
+        // Exclude "Various" artists; top 15 is enough for meaningful gap analysis
         const topArtists = collectionArtists
             .filter(a => !/^various/i.test(a.name.trim()))
-            .slice(0, 25);
+            .slice(0, 15);
+        setProgress({ done: 0, total: topArtists.length });
         const gapData = [];
 
         for (const artist of topArtists) {
@@ -1366,7 +1381,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                 // Masters are deduplicated canonical albums — one entry per album regardless
                 // of pressings. For most artists this is 1–2 pages instead of 10+.
                 let allMasters = [];
-                const MAX_PAGES = 5;
+                const MAX_PAGES = 3;
                 for (let p = 1; p <= MAX_PAGES; p++) {
                     const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
                     if (!res.ok) break;
@@ -1384,7 +1399,10 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                     return !fmts.some(f => f === 'single' || f === 'ep' || f === '7"');
                 });
 
-                if (albumMasters.length === 0) continue;
+                if (albumMasters.length === 0) {
+                    setProgress(prev => ({ ...prev, done: prev.done + 1 }));
+                    continue;
+                }
 
                 // Deduplicate by title (search can return duplicates across pages)
                 const seen = new Map();
@@ -1394,24 +1412,31 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                 }
                 const uniqueMasters = Array.from(seen.values());
 
-                // Match by master ID — exact lookup, no fuzzy title matching needed
+                // Exact master ID match → owned
                 const isOwned = (r) => ownedMasterIds.has(String(r.id));
+                // Different pressing/edition of an album already in collection → alternate
+                const artistOwnedTitles = ownedTitlesByArtist.get(String(artist.id)) || new Set();
+                const isAlternate = (r) => !isOwned(r) && artistOwnedTitles.has(normalizeTitle(r.title));
 
                 const owned = uniqueMasters.filter(isOwned);
-                const missing = uniqueMasters.filter(r => !isOwned(r));
-                // Use collection count as owned floor — it's ground truth
-                const ownedCount = Math.max(owned.length, artist.count);
-                const total = uniqueMasters.length + Math.max(0, ownedCount - owned.length);
+                const alternates = uniqueMasters.filter(isAlternate);
+                const missing = uniqueMasters.filter(r => !isOwned(r) && !isAlternate(r));
+                // Count alternates as effectively owned for completion %
+                const effectiveOwned = owned.length + alternates.length;
+                const ownedCount = Math.max(effectiveOwned, artist.count);
+                const total = uniqueMasters.length + Math.max(0, ownedCount - effectiveOwned);
                 const pct = total > 0 ? Math.round((ownedCount / total) * 100) : 100;
 
-                gapData.push({ artist, total, ownedCount, missing, pct });
+                const entry = { artist, total, ownedCount, missing, owned, alternates, pct };
+                gapData.push(entry);
+                setGaps(prev => [...prev, entry]);
             } catch { /* skip this artist */ }
 
+            setProgress(prev => ({ ...prev, done: prev.done + 1 }));
             // Respect Discogs rate limit between artists
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 150));
         }
 
-        setGaps(gapData);
         writeCache(CACHE_KEYS.gaps, gapData);
         setLoading(false);
 
@@ -1419,7 +1444,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
         if (gapData.some(g => g.pct === 100)) {
             checkAndAwardBadges(getStoredStats(), { total: collectionArtists.length });
         }
-    }, [collectionArtists, ownedMasterIds]);
+    }, [collectionArtists, ownedMasterIds, ownedTitlesByArtist]);
 
     const prevCollectionLoadingRef = React.useRef(collectionLoading);
     useEffect(() => {
@@ -1504,10 +1529,11 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
             </div>
 
             {loading && (
-                <div className="flex flex-col items-center gap-4 py-12 text-gray-500">
-                    <Loader2 size={32} className="animate-spin text-violet-500" />
-                    <p className="text-sm">Fetching discographies for your artists…</p>
-                    <p className="text-xs text-gray-600">This may take a moment (rate-limited API)</p>
+                <div className="flex items-center gap-3 py-3 px-1 text-gray-500">
+                    <Loader2 size={14} className="animate-spin text-violet-500 shrink-0" />
+                    <p className="text-xs">
+                        Analyzing artist {progress.done} of {progress.total}…
+                    </p>
                 </div>
             )}
 
@@ -1532,7 +1558,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                 </div>
             )}
 
-            {!loading && gaps.length > 0 && (
+            {gaps.length > 0 && (
                 <div className="space-y-4">
                     {[...gaps.filter(g => g.pct < 100)].sort((a, b) => {
                         if (sortBy === 'pct_desc') return b.pct - a.pct;
@@ -1540,7 +1566,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                         if (sortBy === 'missing_asc') return a.missing.length - b.missing.length;
                         if (sortBy === 'name_asc') return a.artist.name.localeCompare(b.artist.name);
                         return 0;
-                    }).map(({ artist, total, ownedCount, missing, pct }) => {
+                    }).map(({ artist, total, ownedCount, missing, owned = [], alternates = [], pct }) => {
                         const isExpanded = expandedArtists.has(artist.id);
                         return (
                             <div key={artist.id} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
@@ -1568,8 +1594,8 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                                     </div>
                                 </button>
 
-                                {/* Missing records list */}
-                                {isExpanded && missing.length > 0 && (
+                                {/* Records list: missing first (in color), owned below (grayed out) */}
+                                {isExpanded && (
                                     <div className="border-t border-white/5">
                                         {missing.map(release => {
                                             const releaseId = String(release.main_release || release.id);
@@ -1579,9 +1605,9 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                                                     key={release.id}
                                                     className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors"
                                                 >
-                                                    <button 
+                                                    <button
                                                         onClick={() => setSelectedRelease({ release, artistName: artist.name })}
-                                                        className="flex-1 min-w-0 flex items-center gap-3 text-left group-hover:opacity-80 transition-opacity"
+                                                        className="flex-1 min-w-0 flex items-center gap-3 text-left"
                                                     >
                                                         <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
                                                             {release.thumb ? (
@@ -1593,14 +1619,12 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                                                             )}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
-                                                            <p className="text-xs font-semibold text-white truncate group-hover:text-violet-300 transition-colors">{release.title}</p>
+                                                            <p className="text-xs font-semibold text-white truncate">{release.title}</p>
                                                             <p className="text-[10px] text-gray-500">
                                                                 {release.year || '—'}{release.label ? ` · ${release.label}` : ''}
                                                             </p>
                                                         </div>
                                                     </button>
-                                                    
-                                                    {/* Wantlist button */}
                                                     <button
                                                         onClick={() => addToWantlist(releaseId, release.title)}
                                                         disabled={wState === 'pending' || wState === 'done'}
@@ -1624,13 +1648,92 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, collecti
                                                 </div>
                                             );
                                         })}
-                                    </div>
-                                )}
 
-                                {isExpanded && missing.length === 0 && (
-                                    <div className="border-t border-white/5 px-4 py-4 text-center">
-                                        <CheckCircle size={20} className="mx-auto mb-1 text-green-400 opacity-60" />
-                                        <p className="text-xs text-gray-500">You own all their vinyl releases!</p>
+                                        {/* Alternate editions — different pressing of an album you own */}
+                                        {alternates.length > 0 && (
+                                            <>
+                                                <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 bg-white/[0.01]">
+                                                    <Disc3 size={10} className="text-amber-500 shrink-0" />
+                                                    <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider">Other versions — you own this album</span>
+                                                </div>
+                                                {alternates.map(release => (
+                                                    <div
+                                                        key={release.id}
+                                                        className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors opacity-60"
+                                                    >
+                                                        <button
+                                                            onClick={() => setSelectedRelease({ release, artistName: artist.name })}
+                                                            className="flex-1 min-w-0 flex items-center gap-3 text-left"
+                                                        >
+                                                            <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
+                                                                {release.thumb ? (
+                                                                    <img src={release.thumb} alt={release.title} className="w-full h-full object-cover" loading="lazy" />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center">
+                                                                        <Disc3 size={16} className="text-gray-600" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-xs font-semibold text-white truncate">{release.title}</p>
+                                                                <p className="text-[10px] text-gray-500">
+                                                                    {release.year || '—'}{release.label ? ` · ${release.label}` : ''}
+                                                                </p>
+                                                            </div>
+                                                        </button>
+                                                        <span className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border bg-amber-500/10 border-amber-500/20 text-amber-500 flex-shrink-0">
+                                                            <Disc3 size={10} /> Alt. Version
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
+
+                                        {/* Divider between alternates/missing and owned */}
+                                        {(missing.length > 0 || alternates.length > 0) && owned.length > 0 && (
+                                            <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 bg-white/[0.01]">
+                                                <CheckCircle size={10} className="text-green-500 shrink-0" />
+                                                <span className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">In your collection</span>
+                                            </div>
+                                        )}
+
+                                        {owned.map(release => (
+                                            <div
+                                                key={release.id}
+                                                className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors opacity-40"
+                                            >
+                                                <button
+                                                    onClick={() => setSelectedRelease({ release, artistName: artist.name })}
+                                                    className="flex-1 min-w-0 flex items-center gap-3 text-left"
+                                                >
+                                                    <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
+                                                        {release.thumb ? (
+                                                            <img src={release.thumb} alt={release.title} className="w-full h-full object-cover" loading="lazy" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center">
+                                                                <Disc3 size={16} className="text-gray-600" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-semibold text-white truncate">{release.title}</p>
+                                                        <p className="text-[10px] text-gray-500">
+                                                            {release.year || '—'}{release.label ? ` · ${release.label}` : ''}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                                <span className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border bg-green-500/10 border-green-500/20 text-green-500 flex-shrink-0">
+                                                    <CheckCircle size={10} /> Owned
+                                                </span>
+                                            </div>
+                                        ))}
+
+                                        {missing.length === 0 && owned.length === 0 && (
+                                            <div className="px-4 py-4 text-center">
+                                                <CheckCircle size={20} className="mx-auto mb-1 text-green-400 opacity-60" />
+                                                <p className="text-xs text-gray-500">You own all their vinyl releases!</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1827,7 +1930,7 @@ const ShopDetailModal = ({ shop, onClose, favorites, onToggleFavorite }) => {
                         {osmType && osmId && (
                             <a href={osmUrl} target="_blank" rel="noopener noreferrer"
                                 className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
-                                <Map size={13} /> OpenStreetMap
+                                <MapIcon size={13} /> OpenStreetMap
                             </a>
                         )}
                         <a href={discogsUrl} target="_blank" rel="noopener noreferrer"
@@ -2050,7 +2153,7 @@ const ShopLocalSection = () => {
                             </button>
                             <button onClick={() => setShowMap(v => !v)}
                                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${showMap ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
-                                <Map size={12} /> {showMap ? 'Hide Map' : 'Show Map'}
+                                <MapIcon size={12} /> {showMap ? 'Hide Map' : 'Show Map'}
                             </button>
                         </div>
                     )}
@@ -2258,6 +2361,24 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
         return s;
     }, [releases]);
 
+    // Map of artistId → Set of normalized base titles owned by the user.
+    // Used to detect alternate editions (e.g. "Whirlwind Deluxe" when "Whirlwind" is owned).
+    const ownedTitlesByArtist = useMemo(() => {
+        const map = new Map();
+        releases.forEach(r => {
+            const info = r.basic_information || {};
+            const norm = normalizeTitle(info.title || '');
+            if (!norm) return;
+            (info.artists || []).forEach(a => {
+                if (!a.id) return;
+                const key = String(a.id);
+                if (!map.has(key)) map.set(key, new Set());
+                map.get(key).add(norm);
+            });
+        });
+        return map;
+    }, [releases]);
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-32">
             {/* Header */}
@@ -2328,6 +2449,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
                     <CompleteCollectionSection
                         collectionArtists={collectionArtists}
                         ownedMasterIds={ownedMasterIds}
+                        ownedTitlesByArtist={ownedTitlesByArtist}
                         collectionLoading={collectionLoading}
                     />
                 )}
