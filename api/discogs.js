@@ -318,7 +318,7 @@ export default async function handler(req, res) {
         case 'matrixSearch': {
             const matrixQ = url.searchParams.get('q') || req.query?.q || '';
             if (!matrixQ) return res.status(400).json({ error: 'Missing query parameter q' });
-            const cleaned = matrixQ.trim().replace(/[^\w\s\-\/]/g, '').replace(/\s+/g, ' ').slice(0, 80);
+            const cleaned = matrixQ.trim().replace(/[^\w\s/-]/g, '').replace(/\s+/g, ' ').slice(0, 80);
             if (!cleaned) return res.status(400).json({ error: 'Query empty after cleaning' });
             apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(cleaned)}&type=release&per_page=10&page=1`;
             break;
@@ -369,7 +369,7 @@ export default async function handler(req, res) {
             let payload = {};
             if (req.method === 'POST') {
                 if (typeof req.body === 'string') {
-                    try { payload = JSON.parse(req.body); } catch(e) {}
+                    try { payload = JSON.parse(req.body); } catch(e) { /* ignore */ }
                 } else if (req.body) {
                     payload = req.body;
                 }

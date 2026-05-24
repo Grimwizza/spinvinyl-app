@@ -105,7 +105,7 @@ const parseDate = (str) => {
 
 // Matches date headers in various formats upcomingvinyl.com has used:
 //   "April 19, 2026"  "April 19, 2026 / Saturday"  "April 19"  "April 19 · Saturday"
-const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·\-]\s*\w+)?$/;
+const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 
 function scrapeHTML(html) {
     const $ = cheerio.load(html);

@@ -118,15 +118,10 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/discogs (Serverless / Express Style) ---
             if (url === '/discogs') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        try {
-                            // CRITICAL: Await the handler since it's async
-                            await discogsHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        discogsHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -141,14 +136,10 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/lyrics ---
             if (url === '/lyrics') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        try {
-                            await lyricsHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        lyricsHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -163,14 +154,10 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/releases (RSS news feed aggregator) ---
             if (url === '/releases') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        try {
-                            await releasesHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        releasesHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -185,14 +172,10 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/upcoming (upcomingvinyl.com scraper) ---
             if (url === '/upcoming') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        try {
-                            await upcomingHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        upcomingHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -207,15 +190,11 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/upcoming-detail (upcomingvinyl.com record detail scraper) ---
             if (url === '/upcoming-detail') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
                         req.query = { url: urlParams.get('url') };
-                        try {
-                            await upcomingDetailHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        upcomingDetailHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -230,14 +209,10 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/shops (Google Places record store finder) ---
             if (url === '/shops') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        try {
-                            await shopsHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        shopsHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -252,14 +227,10 @@ export const apiMiddleware = () => ({
             // --- ROUTE: /api/search-shops (Brave Search / Gemini augmented search) ---
             if (url === '/search-shops') {
                 try {
-                    await new Promise(async (resolve, reject) => {
+                    await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        try {
-                            await searchShopsHandler(req, mockedRes);
-                        } catch (handlerErr) {
-                            reject(handlerErr);
-                        }
+                        searchShopsHandler(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
