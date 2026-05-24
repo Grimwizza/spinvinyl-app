@@ -1,19 +1,14 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { apiMiddleware } from './vite-api-proxy.js'
 
 // https://vitejs.dev/config/
-export default defineConfig(async ({ mode, command }) => {
+export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   Object.assign(process.env, env);
 
-  const plugins = [react()];
-  if (command === 'serve') {
-    const { apiMiddleware } = await import('./vite-api-proxy.js');
-    plugins.push(apiMiddleware());
-  }
-
   return {
-    plugins,
+    plugins: [react(), apiMiddleware()],
     server: {
       watch: {
         usePolling: true,

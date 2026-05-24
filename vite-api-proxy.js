@@ -1,11 +1,29 @@
 
-import discogsHandler from './api/discogs.js';
-import lyricsHandler from './api/lyrics.js';
-import releasesHandler from './api/releases.js';
-import upcomingHandler from './api/upcoming.js';
-import upcomingDetailHandler from './api/upcoming-detail.js';
-import shopsHandler from './api/shops.js';
-import searchShopsHandler from './api/search-shops.js';
+// API handlers are lazy-loaded on first use to avoid pulling cheerio and other
+// server-only dependencies into the Vite config bundling step.
+let _handlers = null;
+async function getHandlers() {
+    if (_handlers) return _handlers;
+    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops] = await Promise.all([
+        import('./api/discogs.js'),
+        import('./api/lyrics.js'),
+        import('./api/releases.js'),
+        import('./api/upcoming.js'),
+        import('./api/upcoming-detail.js'),
+        import('./api/shops.js'),
+        import('./api/search-shops.js'),
+    ]);
+    _handlers = {
+        discogs: discogs.default,
+        lyrics: lyrics.default,
+        releases: releases.default,
+        upcoming: upcoming.default,
+        upcomingDetail: upcomingDetail.default,
+        shops: shops.default,
+        searchShops: searchShops.default,
+    };
+    return _handlers;
+}
 
 // Helper to mock Vercel/Express 'res' object for Serverless Functions
 const mockResponse = (resolve, res) => {
@@ -112,8 +130,7 @@ export const apiMiddleware = () => ({
                 console.error('[API Proxy] Failed to reload .env', e);
             }
 
-            // ... route handling ...
-
+            const h = await getHandlers();
 
             // --- ROUTE: /api/discogs (Serverless / Express Style) ---
             if (url === '/discogs') {
@@ -121,7 +138,7 @@ export const apiMiddleware = () => ({
                     await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        discogsHandler(req, mockedRes).catch(reject);
+                        h.discogs(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -139,7 +156,7 @@ export const apiMiddleware = () => ({
                     await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        lyricsHandler(req, mockedRes).catch(reject);
+                        h.lyrics(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -157,7 +174,7 @@ export const apiMiddleware = () => ({
                     await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        releasesHandler(req, mockedRes).catch(reject);
+                        h.releases(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -175,7 +192,7 @@ export const apiMiddleware = () => ({
                     await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        upcomingHandler(req, mockedRes).catch(reject);
+                        h.upcoming(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -194,7 +211,7 @@ export const apiMiddleware = () => ({
                         const mockedRes = mockResponse(resolve, res);
                         const urlParams = new URLSearchParams(req.url.split('?')[1] || '');
                         req.query = { url: urlParams.get('url') };
-                        upcomingDetailHandler(req, mockedRes).catch(reject);
+                        h.upcomingDetail(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -212,7 +229,7 @@ export const apiMiddleware = () => ({
                     await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        shopsHandler(req, mockedRes).catch(reject);
+                        h.shops(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
@@ -230,7 +247,7 @@ export const apiMiddleware = () => ({
                     await new Promise((resolve, reject) => {
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
-                        searchShopsHandler(req, mockedRes).catch(reject);
+                        h.searchShops(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
