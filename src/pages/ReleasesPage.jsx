@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X } from 'lucide-react';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
@@ -11,7 +11,7 @@ import 'leaflet/dist/leaflet.css';
 const CACHE_KEYS = {
     releases: 'spinvinyl_releases_cache',
     news: 'spinvinyl_news_cache',
-    gaps: 'spinvinyl_gaps_cache_v3',
+    gaps: 'spinvinyl_gaps_cache_v4',
     wantlist: 'spinvinyl_wantlist_cache',
 };
 const TTL = { releases: 6, news: 4, gaps: 12, wantlist: 1 }; // hours
@@ -1348,21 +1348,107 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
     );
 };
 
-const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTitlesByArtist, collectionLoading }) => {
+const MINOR_FORMATS = new Set([
+    'single','ep','7"','12"','compilation','live','mixtape/dj mix',
+    'dj mix','promo','promotional','unofficial release','test pressing','box set',
+]);
+
+const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTitlesByArtist, collectionByArtist, collectionLoading }) => {
     const [gaps, setGaps] = useState([]);
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState({ done: 0, total: 0 });
+    const [loadingExtra, setLoadingExtra] = useState(false);
+    const [extraProgress, setExtraProgress] = useState({ done: 0, total: 0 });
     const [error, setError] = useState(null);
     const [expandedArtists, setExpandedArtists] = useState(new Set());
     const [wantlistState, setWantlistState] = useState({}); // { [releaseId]: 'pending' | 'done' | 'error' }
     const [toastMsg, setToastMsg] = useState(null);
     const [selectedRelease, setSelectedRelease] = useState(null);
     const [sortBy, setSortBy] = useState('pct_desc');
+    const [pinnedArtistIds, setPinnedArtistIds] = useState(() => {
+        try { return new Set(JSON.parse(localStorage.getItem('spinvinyl_gaps_pinned') || '[]')); }
+        catch { return new Set(); }
+    });
+    const [showComplete, setShowComplete] = useState(
+        () => localStorage.getItem('spinvinyl_gaps_show_complete') === 'true'
+    );
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchOpen, setSearchOpen] = useState(false);
+
+    // Fetches gap data for a single artist. Shared by fetchGaps loop and on-demand search adds.
+    const fetchArtistGap = useCallback(async (artist) => {
+        try {
+            let allMasters = [];
+            for (let p = 1; p <= 3; p++) {
+                const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
+                if (!res.ok) break;
+                const data = await res.json();
+                allMasters = allMasters.concat(data.results || []);
+                if (p >= (data.pagination?.pages ?? 1)) break;
+                await new Promise(r => setTimeout(r, 300));
+            }
+            const albumMasters = allMasters.filter(r => {
+                const fmts = (r.format || []).map(f => f.toLowerCase());
+                return fmts.some(f => f === 'album' || f === 'lp') && !fmts.some(f => MINOR_FORMATS.has(f));
+            });
+            if (albumMasters.length === 0) return null;
+            const seen = new Map();
+            for (const r of albumMasters) {
+                const t = (r.title || '').toLowerCase().trim();
+                if (!seen.has(t)) seen.set(t, r);
+            }
+            const uniqueMasters = Array.from(seen.values());
+            const isOwned = (r) =>
+                ownedMasterIds.has(String(r.id)) ||
+                ownedMasterIds.has(String(r.main_release));
+            const artistPrefix = artist.name.toLowerCase() + ' - ';
+            const albumTitle = (r) => {
+                const lower = (r.title || '').toLowerCase();
+                return lower.startsWith(artistPrefix) ? r.title.slice(artistPrefix.length) : r.title;
+            };
+            const artistOwnedTitles = ownedTitlesByArtist.get(String(artist.id)) || new Set();
+            const isAlternate = (r) => !isOwned(r) && artistOwnedTitles.has(normalizeTitle(albumTitle(r)));
+            const owned = uniqueMasters.filter(isOwned);
+            const alternates = uniqueMasters.filter(isAlternate);
+            const missing = uniqueMasters.filter(r => !isOwned(r) && !isAlternate(r));
+            const effectiveOwned = owned.length + alternates.length;
+            const ownedCount = Math.max(effectiveOwned, artist.count);
+            const total = uniqueMasters.length + Math.max(0, ownedCount - effectiveOwned);
+            const pct = total > 0 ? Math.round((ownedCount / total) * 100) : 100;
+            return { artist, total, ownedCount, missing, owned, alternates, pct };
+        } catch {
+            return null;
+        }
+    }, [ownedMasterIds, ownedTitlesByArtist]);
+
+    // Loads all artists not already in loadedGaps. Called when "complete" view is active.
+    const fetchExtraArtists = useCallback(async (loadedGaps) => {
+        const loadedIds = new Set(loadedGaps.map(g => g.artist.id));
+        const remaining = collectionArtists.filter(
+            a => !/^various/i.test(a.name.trim()) && !loadedIds.has(a.id)
+        );
+        if (!remaining.length) return;
+        const runId = ++extraRunRef.current;
+        setLoadingExtra(true);
+        setExtraProgress({ done: 0, total: remaining.length });
+        for (const artist of remaining) {
+            if (extraRunRef.current !== runId) break;
+            const entry = await fetchArtistGap(artist);
+            if (entry) setGaps(prev => [...prev, entry]);
+            setExtraProgress(prev => ({ ...prev, done: prev.done + 1 }));
+            await new Promise(r => setTimeout(r, 150));
+        }
+        if (extraRunRef.current === runId) setLoadingExtra(false);
+    }, [collectionArtists, fetchArtistGap]);
 
     const fetchGaps = useCallback(async (force = false) => {
         if (!force) {
             const cached = readCache(CACHE_KEYS.gaps);
-            if (cached) { setGaps(cached); return; }
+            if (cached) {
+                setGaps(cached);
+                if (showCompleteRef.current) fetchExtraArtists(cached);
+                return;
+            }
         }
         if (!collectionArtists.length) return;
         const runId = ++fetchRunRef.current;
@@ -1371,109 +1457,85 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         setGaps([]);
         clearCache(CACHE_KEYS.gaps);
 
-        // Exclude "Various" artists; top 15 is enough for meaningful gap analysis
-        const topArtists = collectionArtists
+        const baseArtists = collectionArtists
             .filter(a => !/^various/i.test(a.name.trim()))
             .slice(0, 15);
+        const pinnedExtras = collectionArtists.filter(
+            a => pinnedArtistIdsRef.current.has(a.id) && !baseArtists.some(b => b.id === a.id)
+        );
+        const topArtists = [...baseArtists, ...pinnedExtras];
         setProgress({ done: 0, total: topArtists.length });
         const gapData = [];
 
         for (const artist of topArtists) {
-            if (fetchRunRef.current !== runId) return; // newer fetch started
-            try {
-                // Fetch master releases for this artist via search API.
-                // Masters are deduplicated canonical albums — one entry per album regardless
-                // of pressings. For most artists this is 1–2 pages instead of 10+.
-                let allMasters = [];
-                const MAX_PAGES = 3;
-                for (let p = 1; p <= MAX_PAGES; p++) {
-                    const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
-                    if (!res.ok) break;
-                    const data = await res.json();
-                    allMasters = allMasters.concat(data.results || []);
-                    const totalPages = data.pagination?.pages ?? 1;
-                    if (p >= totalPages) break;
-                    await new Promise(r => setTimeout(r, 300));
-                }
-
-                // Keep only studio albums: must include "album" or "lp" AND must not be
-                // a compilation, live recording, promo, DJ mix, or other minor release type.
-                const MINOR_FORMATS = new Set([
-                    'single','ep','7"','12"','compilation','live','mixtape/dj mix',
-                    'dj mix','promo','promotional','unofficial release','test pressing','box set',
-                ]);
-                const albumMasters = allMasters.filter(r => {
-                    const fmts = (r.format || []).map(f => f.toLowerCase());
-                    const isAlbum = fmts.some(f => f === 'album' || f === 'lp');
-                    const isMinor = fmts.some(f => MINOR_FORMATS.has(f));
-                    return isAlbum && !isMinor;
-                });
-
-                if (albumMasters.length === 0) {
-                    setProgress(prev => ({ ...prev, done: prev.done + 1 }));
-                    continue;
-                }
-
-                // Deduplicate by title (search can return duplicates across pages)
-                const seen = new Map();
-                for (const r of albumMasters) {
-                    const t = (r.title || '').toLowerCase().trim();
-                    if (!seen.has(t)) seen.set(t, r);
-                }
-                const uniqueMasters = Array.from(seen.values());
-
-                // Exact master ID match → owned
-                const isOwned = (r) => ownedMasterIds.has(String(r.id));
-                // Discogs search titles are prefixed "Artist Name - Album Title"; strip it for comparison
-                // against collection titles which are stored as plain album titles.
-                const artistPrefix = artist.name.toLowerCase() + ' - ';
-                const albumTitle = (r) => {
-                    const lower = (r.title || '').toLowerCase();
-                    return lower.startsWith(artistPrefix) ? r.title.slice(artistPrefix.length) : r.title;
-                };
-                // Different pressing/edition of an album already in collection → alternate
-                const artistOwnedTitles = ownedTitlesByArtist.get(String(artist.id)) || new Set();
-                const isAlternate = (r) => !isOwned(r) && artistOwnedTitles.has(normalizeTitle(albumTitle(r)));
-
-                const owned = uniqueMasters.filter(isOwned);
-                const alternates = uniqueMasters.filter(isAlternate);
-                const missing = uniqueMasters.filter(r => !isOwned(r) && !isAlternate(r));
-                // Count alternates as effectively owned for completion %
-                const effectiveOwned = owned.length + alternates.length;
-                const ownedCount = Math.max(effectiveOwned, artist.count);
-                const total = uniqueMasters.length + Math.max(0, ownedCount - effectiveOwned);
-                const pct = total > 0 ? Math.round((ownedCount / total) * 100) : 100;
-
-                const entry = { artist, total, ownedCount, missing, owned, alternates, pct };
+            if (fetchRunRef.current !== runId) return;
+            const entry = await fetchArtistGap(artist);
+            if (entry) {
                 gapData.push(entry);
                 setGaps(prev => [...prev, entry]);
-            } catch { /* skip this artist */ }
-
+            }
             setProgress(prev => ({ ...prev, done: prev.done + 1 }));
-            // Respect Discogs rate limit between artists
             await new Promise(r => setTimeout(r, 150));
         }
 
-        if (fetchRunRef.current !== runId) return; // superseded
+        if (fetchRunRef.current !== runId) return;
         writeCache(CACHE_KEYS.gaps, gapData);
         setLoading(false);
 
-        // Check for newly earned badges (completionist badges read from gaps cache)
+        if (showCompleteRef.current) fetchExtraArtists(gapData);
+
         if (gapData.some(g => g.pct === 100)) {
             checkAndAwardBadges(getStoredStats(), { total: collectionArtists.length });
         }
-    }, [collectionArtists, ownedMasterIds, ownedTitlesByArtist]);
+    }, [collectionArtists, fetchArtistGap, fetchExtraArtists]);
 
     const fetchRunRef = React.useRef(0);
+    const extraRunRef = React.useRef(0);
+    const pinnedArtistIdsRef = React.useRef(pinnedArtistIds);
+    const showCompleteRef = React.useRef(showComplete);
     const prevCollectionLoadingRef = React.useRef(collectionLoading);
+
+    // Keep refs in sync so callbacks can read latest values without dep-array churn
+    useEffect(() => { pinnedArtistIdsRef.current = pinnedArtistIds; }, [pinnedArtistIds]);
+    useEffect(() => { showCompleteRef.current = showComplete; }, [showComplete]);
+
+    // Persist user preferences
+    useEffect(() => {
+        localStorage.setItem('spinvinyl_gaps_pinned', JSON.stringify([...pinnedArtistIds]));
+    }, [pinnedArtistIds]);
+    useEffect(() => {
+        localStorage.setItem('spinvinyl_gaps_show_complete', String(showComplete));
+    }, [showComplete]);
+
     useEffect(() => {
         const wasLoading = prevCollectionLoadingRef.current;
         prevCollectionLoadingRef.current = collectionLoading;
-        // Collection just finished loading — clear any gaps cached from a partial collection
         if (wasLoading && !collectionLoading) clearCache(CACHE_KEYS.gaps);
     }, [collectionLoading]);
 
     useEffect(() => { if (collectionArtists.length && !collectionLoading) fetchGaps(); }, [fetchGaps, collectionLoading]);
+
+    // Add an artist from the search picker — fetches on demand if not already loaded
+    const handleSelectArtist = useCallback(async (artist) => {
+        setSearchOpen(false);
+        setSearchQuery('');
+        setPinnedArtistIds(prev => new Set([...prev, artist.id]));
+        if (gaps.some(g => g.artist.id === artist.id)) return; // already loaded
+        const entry = await fetchArtistGap(artist);
+        if (entry) setGaps(prev => [...prev, entry]);
+    }, [gaps, fetchArtistGap]);
+
+    // Remove a pinned artist (doesn't remove from gaps — just unpins it)
+    const handleUnpinArtist = useCallback((artistId) => {
+        setPinnedArtistIds(prev => { const s = new Set(prev); s.delete(artistId); return s; });
+    }, []);
+
+    // Toggle show-complete; when turning on, fetch all un-loaded artists
+    const handleToggleShowComplete = useCallback(async () => {
+        const next = !showComplete;
+        setShowComplete(next);
+        if (next) fetchExtraArtists(gaps);
+    }, [showComplete, gaps, fetchExtraArtists]);
 
     const toggleArtist = (artistId) => {
         setExpandedArtists(prev => {
@@ -1526,6 +1588,31 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     <p className="text-xs text-gray-500 mt-0.5">Vinyl albums you don't own yet, by artists you collect</p>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* Show complete toggle */}
+                    <button
+                        onClick={handleToggleShowComplete}
+                        disabled={loadingExtra}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                            showComplete
+                                ? 'bg-green-500/15 border-green-500/30 text-green-400'
+                                : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300'
+                        }`}
+                        title={showComplete ? 'Hide complete artists' : 'Show complete artists'}
+                    >
+                        <CheckCircle size={10} />
+                        {showComplete ? 'Complete' : 'Complete'}
+                    </button>
+                    {/* Add artist search trigger */}
+                    <button
+                        onClick={() => setSearchOpen(o => !o)}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                            searchOpen
+                                ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                        }`}
+                    >
+                        <Search size={10} /> Artist
+                    </button>
                     <select
                         value={sortBy}
                         onChange={e => setSortBy(e.target.value)}
@@ -1547,12 +1634,88 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                 </div>
             </div>
 
+            {/* Artist search dropdown */}
+            {searchOpen && (
+                <div className="mb-3 relative">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus-within:border-violet-500/50">
+                        <Search size={12} className="text-gray-500 shrink-0" />
+                        <input
+                            autoFocus
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search your artists…"
+                            className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="text-gray-600 hover:text-gray-400">
+                                <X size={10} />
+                            </button>
+                        )}
+                    </div>
+                    {searchQuery.trim().length > 0 && (() => {
+                        const q = searchQuery.trim().toLowerCase();
+                        const results = collectionArtists
+                            .filter(a => !/^various/i.test(a.name) && a.name.toLowerCase().includes(q))
+                            .slice(0, 8);
+                        if (!results.length) return (
+                            <div className="mt-1 px-3 py-2 text-xs text-gray-600 bg-gray-900 border border-white/10 rounded-xl">No artists found</div>
+                        );
+                        return (
+                            <div className="mt-1 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                                {results.map(a => {
+                                    const loaded = gaps.some(g => g.artist.id === a.id);
+                                    const pinned = pinnedArtistIds.has(a.id);
+                                    return (
+                                        <button
+                                            key={a.id}
+                                            onClick={() => handleSelectArtist(a)}
+                                            className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
+                                        >
+                                            <span className="text-xs text-white">{a.name}</span>
+                                            <span className="text-[10px] text-gray-600">
+                                                {loaded || pinned
+                                                    ? <CheckCircle size={10} className="text-green-500" />
+                                                    : <span className="text-gray-600">{a.count} album{a.count !== 1 ? 's' : ''}</span>
+                                                }
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })()}
+                </div>
+            )}
+
+            {/* Pinned artist chips */}
+            {pinnedArtistIds.size > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                    {[...pinnedArtistIds].map(id => {
+                        const artist = collectionArtists.find(a => a.id === id);
+                        if (!artist) return null;
+                        return (
+                            <span key={id} className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-violet-500/10 border border-violet-500/20 text-violet-300">
+                                {artist.name}
+                                <button onClick={() => handleUnpinArtist(id)} className="hover:text-white transition-colors ml-0.5">
+                                    <X size={9} />
+                                </button>
+                            </span>
+                        );
+                    })}
+                </div>
+            )}
+
             {loading && (
                 <div className="flex items-center gap-3 py-3 px-1 text-gray-500">
                     <Loader2 size={14} className="animate-spin text-violet-500 shrink-0" />
-                    <p className="text-xs">
-                        Analyzing artist {progress.done} of {progress.total}…
-                    </p>
+                    <p className="text-xs">Analyzing artist {progress.done} of {progress.total}…</p>
+                </div>
+            )}
+            {loadingExtra && (
+                <div className="flex items-center gap-3 py-2 px-1 text-gray-500">
+                    <Loader2 size={12} className="animate-spin text-green-500 shrink-0" />
+                    <p className="text-xs">Loading all artists… {extraProgress.done} of {extraProgress.total}</p>
                 </div>
             )}
 
@@ -1579,13 +1742,13 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
 
             {gaps.length > 0 && (
                 <div className="space-y-4">
-                    {[...gaps.filter(g => g.pct < 100)].sort((a, b) => {
+                    {[...gaps.filter(g => pinnedArtistIds.has(g.artist.id) || (showComplete ? g.pct === 100 : g.pct < 100))].sort((a, b) => {
                         if (sortBy === 'pct_desc') return b.pct - a.pct;
                         if (sortBy === 'owned_desc') return b.ownedCount - a.ownedCount;
                         if (sortBy === 'missing_asc') return a.missing.length - b.missing.length;
                         if (sortBy === 'name_asc') return a.artist.name.localeCompare(b.artist.name);
                         return 0;
-                    }).map(({ artist, total, ownedCount, missing, owned = [], alternates = [], pct }) => {
+                    }).map(({ artist, total, ownedCount, missing, alternates = [], pct }) => {
                         const isExpanded = expandedArtists.has(artist.id);
                         return (
                             <div key={artist.id} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
@@ -1709,25 +1872,25 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                         )}
 
                                         {/* Divider between alternates/missing and owned */}
-                                        {(missing.length > 0 || alternates.length > 0) && owned.length > 0 && (
+                                        {(missing.length > 0 || alternates.length > 0) && (collectionByArtist.get(String(artist.id)) || []).length > 0 && (
                                             <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 bg-white/[0.01]">
                                                 <CheckCircle size={10} className="text-green-500 shrink-0" />
                                                 <span className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">In your collection</span>
                                             </div>
                                         )}
 
-                                        {owned.map(release => (
+                                        {(collectionByArtist.get(String(artist.id)) || []).map(info => (
                                             <div
-                                                key={release.id}
+                                                key={info.id || info.title}
                                                 className="flex items-center gap-3 px-4 py-3 border-b border-white/5 last:border-0 hover:bg-white/[0.02] transition-colors opacity-40"
                                             >
                                                 <button
-                                                    onClick={() => setSelectedRelease({ release, artistName: artist.name })}
+                                                    onClick={() => setSelectedRelease({ release: info, artistName: artist.name })}
                                                     className="flex-1 min-w-0 flex items-center gap-3 text-left"
                                                 >
                                                     <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
-                                                        {release.thumb ? (
-                                                            <img src={release.thumb} alt={release.title} className="w-full h-full object-cover" loading="lazy" />
+                                                        {info.thumb ? (
+                                                            <img src={info.thumb} alt={info.title} className="w-full h-full object-cover" loading="lazy" />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center">
                                                                 <Disc3 size={16} className="text-gray-600" />
@@ -1735,9 +1898,9 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                                         )}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-semibold text-white truncate">{release.title}</p>
+                                                        <p className="text-xs font-semibold text-white truncate">{info.title}</p>
                                                         <p className="text-[10px] text-gray-500">
-                                                            {release.year || '—'}{release.label ? ` · ${release.label}` : ''}
+                                                            {info.year || '—'}{info.labels?.[0]?.name ? ` · ${info.labels[0].name}` : ''}
                                                         </p>
                                                     </div>
                                                 </button>
@@ -1747,7 +1910,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                             </div>
                                         ))}
 
-                                        {missing.length === 0 && owned.length === 0 && (
+                                        {missing.length === 0 && (collectionByArtist.get(String(artist.id)) || []).length === 0 && (
                                             <div className="px-4 py-4 text-center">
                                                 <CheckCircle size={20} className="mx-auto mb-1 text-green-400 opacity-60" />
                                                 <p className="text-xs text-gray-500">You own all their vinyl releases!</p>
@@ -2398,6 +2561,22 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
         return map;
     }, [releases]);
 
+    // Map of artistId → Array of basic_information objects from the user's collection.
+    // Used to render "In your collection" directly from collection data rather than search results.
+    const collectionByArtist = useMemo(() => {
+        const map = new Map();
+        releases.forEach(r => {
+            const info = r.basic_information || {};
+            (info.artists || []).forEach(a => {
+                if (!a.id) return;
+                const key = String(a.id);
+                if (!map.has(key)) map.set(key, []);
+                map.get(key).push(info);
+            });
+        });
+        return map;
+    }, [releases]);
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-32">
             {/* Header */}
@@ -2469,6 +2648,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
                         collectionArtists={collectionArtists}
                         ownedMasterIds={ownedMasterIds}
                         ownedTitlesByArtist={ownedTitlesByArtist}
+                        collectionByArtist={collectionByArtist}
                         collectionLoading={collectionLoading}
                     />
                 )}
