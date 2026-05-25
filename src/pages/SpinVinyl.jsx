@@ -7,8 +7,6 @@ import AchievementsPage from './AchievementsPage.jsx';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
-import MatrixScanner from '../components/MatrixScanner.jsx';
-import ScanPicker from '../components/ScanPicker.jsx';
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -1349,9 +1347,7 @@ export const SpinVinyl = () => {
 
     // ─── Gamification State ──────────────────────────────────────
     const [activePage, setActivePage] = useState('collection'); // 'collection' | 'achievements' | 'stats'
-    const [showScanPicker, setShowScanPicker] = useState(false);
     const [showScanner, setShowScanner] = useState(false);
-    const [showMatrixScanner, setShowMatrixScanner] = useState(false);
     const [scanToast, setScanToast] = useState(null); // { title } for 3s
     const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
 
@@ -1733,7 +1729,7 @@ export const SpinVinyl = () => {
 
                             {/* Scan Record */}
                             <button
-                                onClick={() => setShowScanPicker(true)}
+                                onClick={() => setShowScanner(true)}
                                 className="flex items-center justify-center gap-2 px-6 py-2.5 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white text-sm sm:text-base font-bold shadow-lg shadow-violet-500/25 transition-all hover:scale-[1.03] active:scale-[0.97] min-h-[44px] w-full sm:w-fit group"
                             >
                                 <Barcode size={18} className="group-hover:rotate-3 transition-transform" />
@@ -2049,17 +2045,6 @@ export const SpinVinyl = () => {
                 </div>
             )}
 
-            {/* Scan picker */}
-            {showScanPicker && (
-                <ScanPicker
-                    onClose={() => setShowScanPicker(false)}
-                    onSelect={(mode) => {
-                        setShowScanPicker(false);
-                        if (mode === 'barcode') setShowScanner(true);
-                        else setShowMatrixScanner(true);
-                    }}
-                />
-            )}
             {/* Barcode scanner modal */}
             {showScanner && (
                 <BarcodeScanner
@@ -2068,19 +2053,6 @@ export const SpinVinyl = () => {
                     authUsername={authUsername}
                     onAddSuccess={(title) => {
                         setShowScanner(false);
-                        setScanToast({ title });
-                        setTimeout(() => setScanToast(null), 3500);
-                    }}
-                />
-            )}
-            {/* Matrix number scanner modal */}
-            {showMatrixScanner && (
-                <MatrixScanner
-                    onClose={() => setShowMatrixScanner(false)}
-                    clearCollectionCache={clearCollectionCache}
-                    authUsername={authUsername}
-                    onAddSuccess={(title) => {
-                        setShowMatrixScanner(false);
                         setScanToast({ title });
                         setTimeout(() => setScanToast(null), 3500);
                     }}
