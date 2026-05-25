@@ -24,12 +24,35 @@ export const getStoredStats = () => {
     }
 };
 
-const saveStats = (stats) => {
+export const saveStats = (stats) => {
     try {
         localStorage.setItem(STATS_KEY, JSON.stringify(stats));
     } catch (e) {
         console.error('[StatsEngine] Failed to save:', e);
     }
+};
+
+/**
+ * Recompute all derived aggregates from a sessions array.
+ * Returns a full stats object. Does NOT save — caller decides.
+ * Used by syncEngine after merging local + cloud sessions.
+ */
+export const recomputeFromSessions = (sessions) => {
+    const stats = defaultStats();
+    stats.sessions = sessions;
+    for (const s of sessions) {
+        const key = String(s.albumId);
+        stats.albumPlayCounts[key] = (stats.albumPlayCounts[key] || 0) + 1;
+        (s.genres || []).forEach(g => { if (g) stats.genrePlays[g] = (stats.genrePlays[g] || 0) + 1; });
+        (s.labels || []).forEach(l => { if (l) stats.labelPlays[l] = (stats.labelPlays[l] || 0) + 1; });
+        if (s.year > 0) {
+            const decade = `${Math.floor(s.year / 10) * 10}s`;
+            stats.decadePlays[decade] = (stats.decadePlays[decade] || 0) + 1;
+        }
+        stats.totalSessions += 1;
+        stats.totalPlaySeconds += s.durationSeconds || 0;
+    }
+    return stats;
 };
 
 // ─── Session Recording ───────────────────────────────────────────

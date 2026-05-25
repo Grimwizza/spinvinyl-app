@@ -4,7 +4,7 @@
 let _handlers = null;
 async function getHandlers() {
     if (_handlers) return _handlers;
-    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops] = await Promise.all([
+    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync] = await Promise.all([
         import('./api/discogs.js'),
         import('./api/lyrics.js'),
         import('./api/releases.js'),
@@ -12,6 +12,7 @@ async function getHandlers() {
         import('./api/upcoming-detail.js'),
         import('./api/shops.js'),
         import('./api/search-shops.js'),
+        import('./api/sync.js'),
     ]);
     _handlers = {
         discogs: discogs.default,
@@ -21,6 +22,7 @@ async function getHandlers() {
         upcomingDetail: upcomingDetail.default,
         shops: shops.default,
         searchShops: searchShops.default,
+        sync: sync.default,
     };
     return _handlers;
 }
@@ -230,6 +232,24 @@ export const apiMiddleware = () => ({
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
                         h.shops(req, mockedRes).catch(reject);
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/sync (Cloud Sync push/pull) ---
+            if (url === '/sync') {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        h.sync(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);

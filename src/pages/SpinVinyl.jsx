@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode, Lock} from 'lucide-react';
-import { recordSession, getStoredStats } from '../lib/statsEngine.js';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode, Lock} from 'lucide-react';
+import { getStoredStats } from '../lib/statsEngine.js';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
+import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
 import BadgeToast from '../components/BadgeToast.jsx';
 import AchievementsPage from './AchievementsPage.jsx';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
+import RecommendWidget from '../components/RecommendWidget.jsx';
+import CrateView from '../components/CrateView.jsx';
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -1350,6 +1353,7 @@ export const SpinVinyl = () => {
     const [showScanner, setShowScanner] = useState(false);
     const [scanToast, setScanToast] = useState(null); // { title } for 3s
     const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
+    const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
 
@@ -1365,6 +1369,7 @@ export const SpinVinyl = () => {
                 if (data.authenticated) {
                     setIsAuthenticated(true);
                     setAuthUsername(data.username);
+                    pullFromCloud(data.username).catch(() => {});
                 } else {
                     setIsAuthenticated(false);
                 }
@@ -1550,19 +1555,32 @@ export const SpinVinyl = () => {
         localStorage.removeItem('nowSpinning');
     };
 
+    // ─── Flush offline sync queue when connection is restored ─────
+    useEffect(() => {
+        if (!authUsername) return;
+        const handleOnline = () => {
+            flushOfflineQueue(authUsername).then(() => {
+                setOfflineQueueSize(getOfflineQueue().length);
+            });
+        };
+        window.addEventListener('online', handleOnline);
+        return () => window.removeEventListener('online', handleOnline);
+    }, [authUsername]);
+
     // ─── Gamification: record session + check badges ─────────────
-    const handleSessionEnd = useCallback((sessionData) => {
+    const handleSessionEnd = useCallback(async (sessionData) => {
         try {
-            const updatedStats = recordSession(sessionData);
+            const updatedStats = await recordSessionWithSync(sessionData, authUsername);
             const collectionMeta = { total: totalItems };
             const newBadges = checkAndAwardBadges(updatedStats, collectionMeta);
             if (newBadges.length > 0) {
                 setPendingBadges(prev => [...prev, ...newBadges]);
             }
+            setOfflineQueueSize(getOfflineQueue().length);
         } catch (e) {
             console.error('[SpinVinyl] Session recording error:', e);
         }
-    }, [totalItems]);
+    }, [totalItems, authUsername]);
 
     // ─── Filter & Sort ──────────────────────────────────────────
     const filteredAndSorted = useMemo(() => {
@@ -1709,9 +1727,15 @@ export const SpinVinyl = () => {
                             <div className="flex items-center justify-center sm:justify-end gap-3 w-full">
                                 <div className="flex flex-col items-end border-l border-white/10 pl-3">
                                     <span className="text-sm font-bold text-white max-w-[120px] truncate">{authUsername}</span>
-                                    <span className="text-[10px] uppercase tracking-wider text-green-400 font-bold flex items-center gap-1">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
-                                    </span>
+                                    {offlineQueueSize > 0 ? (
+                                        <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div> {offlineQueueSize} unsynced
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] uppercase tracking-wider text-green-400 font-bold flex items-center gap-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
+                                        </span>
+                                    )}
                                 </div>
                                 <button
                                     onClick={async () => {
@@ -1799,6 +1823,9 @@ export const SpinVinyl = () => {
                                 <button onClick={() => setViewMode('list')} className={`p-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors border-l border-white/10 active:opacity-70 ${viewMode === 'list' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="List view">
                                     <List size={17} />
                                 </button>
+                                <button onClick={() => setViewMode('crate')} className={`p-3.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors border-l border-white/10 active:opacity-70 ${viewMode === 'crate' ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'}`} title="Crate view">
+                                    <Box size={17} />
+                                </button>
                             </div>
                         </div>
                         {(searchQuery || sortBy !== 'artist-asc') && (
@@ -1812,6 +1839,16 @@ export const SpinVinyl = () => {
                             </div>
                         )}
                     </div>
+
+                    {/* Recommendations */}
+                    {!loading && !error && releases.length > 0 && (
+                        <RecommendWidget
+                            releases={releases}
+                            albumPlayCounts={getStoredStats().albumPlayCounts}
+                            nowSpinningId={nowSpinning?.id ?? null}
+                            onSpinThis={handleAlbumClick}
+                        />
+                    )}
 
                     {/* Loading */}
                     {loading && (
@@ -1934,6 +1971,11 @@ export const SpinVinyl = () => {
                                 })}
                             </div>
                         </>
+                    )}
+
+                    {/* CRATE View */}
+                    {!loading && !error && viewMode === 'crate' && filteredAndSorted.length > 0 && (
+                        <CrateView releases={filteredAndSorted} onAlbumClick={handleAlbumClick} />
                     )}
 
                     {/* Empty search */}
