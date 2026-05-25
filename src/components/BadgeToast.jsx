@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { markBadgesSeen } from '../lib/badgeEngine.js';
 import { RARITY_COLORS } from '../lib/badgeDefinitions.js';
 
@@ -11,23 +11,39 @@ import { RARITY_COLORS } from '../lib/badgeDefinitions.js';
 const BadgeToast = ({ badge, onDismiss }) => {
     const [visible, setVisible] = useState(false);
     const [exiting, setExiting] = useState(false);
+    const isMountedRef = useRef(true);
+
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
 
     useEffect(() => {
         if (!badge) return;
         // Trigger entrance animation
-        requestAnimationFrame(() => setVisible(true));
+        requestAnimationFrame(() => {
+            if (isMountedRef.current) setVisible(true);
+        });
 
+        let innerTimeoutId = null;
         const exit = setTimeout(() => {
-            setExiting(true);
-            setTimeout(() => {
-                setVisible(false);
-                setExiting(false);
+            if (isMountedRef.current) setExiting(true);
+            innerTimeoutId = setTimeout(() => {
+                if (isMountedRef.current) {
+                    setVisible(false);
+                    setExiting(false);
+                }
                 markBadgesSeen([badge.id]);
                 onDismiss?.();
             }, 400);
         }, 4000);
 
-        return () => clearTimeout(exit);
+        return () => {
+            clearTimeout(exit);
+            if (innerTimeoutId) clearTimeout(innerTimeoutId);
+        };
     }, [badge?.id]);
 
     if (!badge) return null;
@@ -47,8 +63,10 @@ const BadgeToast = ({ badge, onDismiss }) => {
                 onClick={() => {
                     setExiting(true);
                     setTimeout(() => {
-                        setVisible(false);
-                        setExiting(false);
+                        if (isMountedRef.current) {
+                            setVisible(false);
+                            setExiting(false);
+                        }
                         markBadgesSeen([badge.id]);
                         onDismiss?.();
                     }, 300);

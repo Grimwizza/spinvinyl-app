@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera, Star, ChevronLeft } from 'lucide-react';
 
+// Module-level in-memory cache for barcode searches (persists across scanner mounts/unmounts)
+const barcodeCache = {};
+
 // ─── BarcodeScanner ───────────────────────────────────────────────────────────
 // Uses @zxing/browser BrowserMultiFormatReader for live camera UPC scanning.
 // Works on iOS Safari (14.3+) AND Android Chrome via getUserMedia + canvas decoding.
@@ -9,6 +12,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const videoRef      = useRef(null);
     const controlsRef   = useRef(null);   // ZXing IScannerControls { stop() }
     const hasScannedRef = useRef(false);  // Guard: prevent double-firing searchByBarcode
+    const isMountedRef  = useRef(true);
 
     // 'init' | 'scanning' | 'searching' | 'results' | 'empty' | 'error' | 'unsupported'
     const [phase, setPhase]             = useState('init');
@@ -28,12 +32,20 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const [formSleeveCond, setFormSleeveCond]   = useState('Mint (M)');
     const [formNotes, setFormNotes]             = useState('');
 
+    // Setup mounted status tracking
+    useEffect(() => {
+        isMountedRef.current = true;
+        return () => {
+            isMountedRef.current = false;
+        };
+    }, []);
+
     // Fetch user folders on mount
     useEffect(() => {
         fetch('/api/discogs?action=getFolders')
             .then(res => res.json())
             .then(data => {
-                if (data.folders) setFolders(data.folders);
+                if (isMountedRef.current && data.folders) setFolders(data.folders);
             })
             .catch(e => console.error('[BarcodeScanner] Failed to fetch folders:', e));
     }, []);
@@ -60,6 +72,15 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             try { controlsRef.current.stop(); } catch { /* ignore */ }
             controlsRef.current = null;
         }
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject;
+            if (stream && typeof stream.getTracks === 'function') {
+                stream.getTracks().forEach(track => {
+                    try { track.stop(); } catch { /* ignore */ }
+                });
+            }
+            videoRef.current.srcObject = null;
+        }
     };
 
     const searchByBarcode = useCallback(async (code) => {
@@ -67,14 +88,25 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         setPhase('searching');
         setBarcode(code);
         setErrorMsg('');
+
+        if (barcodeCache[code]) {
+            const items = barcodeCache[code];
+            setResults(items);
+            setPhase(items.length > 0 ? 'results' : 'empty');
+            return;
+        }
+
         try {
             const res  = await fetch(`/api/discogs?action=barcodeSearch&barcode=${encodeURIComponent(code)}`);
             const data = await res.json();
+            if (!isMountedRef.current) return;
             if (!res.ok) throw new Error(data.error || 'Search failed');
             const items = data.results || [];
+            barcodeCache[code] = items;
             setResults(items);
             setPhase(items.length > 0 ? 'results' : 'empty');
         } catch (e) {
+            if (!isMountedRef.current) return;
             setErrorMsg(e.message);
             setPhase('error');
         }
@@ -207,13 +239,18 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
             saveUpcLocally(barcode, selectedRelease, payload);
 
+            if (!isMountedRef.current) return;
             setAdded(prev => ({ ...prev, [selectedRelease.id]: true }));
             clearCollectionCache?.();
             onAddSuccess?.(selectedRelease.title);
         } catch (err) {
-            setErrorMsg(err.message);
+            if (isMountedRef.current) {
+                setErrorMsg(err.message);
+            }
         } finally {
-            setAdding(null);
+            if (isMountedRef.current) {
+                setAdding(null);
+            }
         }
     };
 
@@ -235,7 +272,8 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                 </div>
                 <button
                     onClick={onClose}
-                    className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-white/10 active:opacity-70 flex-shrink-0"
+                    aria-label="Close scanner"
+                    className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 transition-all flex-shrink-0"
                 >
                     <X size={20} className="text-white" />
                 </button>
@@ -405,7 +443,14 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                         <label className="block text-[13px] font-medium text-gray-400 mb-2">My Rating</label>
                                         <div className="flex items-center gap-1.5 -ml-1">
                                             {[1, 2, 3, 4, 5].map(star => (
-                                                <button key={star} onClick={() => setFormRating(star)} className="p-1 hover:scale-110 active:scale-95 transition-transform">
+                                                <button
+                                                    key={star}
+                                                    type="button"
+                                                    onClick={() => setFormRating(star)}
+                                                    aria-label={`Rate ${star} star${star !== 1 ? 's' : ''}`}
+                                                    aria-pressed={star <= formRating}
+                                                    className="p-1 hover:scale-110 active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-lg"
+                                                >
                                                     <Star size={28} strokeWidth={1.5} className={star <= formRating ? 'fill-amber-400 text-amber-400 drop-shadow-md' : 'text-gray-600'} />
                                                 </button>
                                             ))}
