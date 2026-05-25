@@ -2,7 +2,7 @@
 // Fetches and parses RSS from vinyl / music journalism sources.
 // No external dependencies — pure XML regex parsing.
 
-const USER_AGENT = 'SpinVinyl/1.0 +https://aimlow.ai';
+const USER_AGENT = 'SpinVinyl/1.0 +https://spinvinyl.app';
 
 // ─── XML / RSS Helpers ────────────────────────────────────────────
 

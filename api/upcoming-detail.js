@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     try {
         const response = await fetch(url, {
             headers: {
-                'User-Agent': 'SpinVinyl/1.0 +https://aimlow.ai',
+                'User-Agent': 'SpinVinyl/1.0 +https://spinvinyl.app',
                 'Accept': 'text/html',
             },
             signal: AbortSignal.timeout(8000),

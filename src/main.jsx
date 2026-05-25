@@ -10,7 +10,7 @@ import './index.css'
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <HelmetProvider>
-      <ThemeProvider defaultTheme="dark" storageKey="aimlow-theme">
+      <ThemeProvider defaultTheme="dark" storageKey="spinvinyl-theme">
         <App />
         <Analytics />
       </ThemeProvider>

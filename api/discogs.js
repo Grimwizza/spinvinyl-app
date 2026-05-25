@@ -5,7 +5,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const DISCOGS_BASE = 'https://api.discogs.com';
-const USER_AGENT = 'SpinVinyl/1.0 +https://aimlow.ai';
+const USER_AGENT = 'SpinVinyl/1.0 +https://spinvinyl.app';
 
 async function discogsRateLimitedFetch(url, options, maxRetries = 3) {
     let delay = 500;

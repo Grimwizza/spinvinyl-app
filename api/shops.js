@@ -8,7 +8,7 @@
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org';
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
 const MILES_TO_METERS = 1609.34;
-const USER_AGENT = 'SpinVinyl/1.0 +https://aimlow.ai';
+const USER_AGENT = 'SpinVinyl/1.0 +https://spinvinyl.app';
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');

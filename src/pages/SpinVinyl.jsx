@@ -144,7 +144,7 @@ const useSpinPWA = () => {
         statusBar.content = 'black-translucent';
         document.head.appendChild(statusBar);
 
-        // Theme color (existing aimlow tag might exist, let's keep the manual append since it's simple)
+        // Theme color — append meta tag directly since it's set once on mount
         const theme = document.createElement('meta');
         theme.name = 'theme-color';
         theme.content = '#030712';

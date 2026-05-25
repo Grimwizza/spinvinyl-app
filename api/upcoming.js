@@ -14,7 +14,7 @@ import { readFile, writeFile } from 'fs/promises';
 
 const UPCOMING_URL = 'https://upcomingvinyl.com/featured';
 const DISCOGS_SEARCH = 'https://api.discogs.com/database/search';
-const USER_AGENT = 'SpinVinyl/1.0 +https://aimlow.ai';
+const USER_AGENT = 'SpinVinyl/1.0 +https://spinvinyl.app';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours — Discogs ToS maximum
 const CACHE_FILE = '/tmp/spinvinyl_upcoming_enriched.json';
 const ENRICH_LIMIT = 40;    // max releases to enrich per cycle
