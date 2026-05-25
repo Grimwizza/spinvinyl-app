@@ -259,6 +259,31 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
     return (
         <div className="fixed inset-0 z-[200] flex flex-col bg-black">
+            <style dangerouslySetInnerHTML={{ __html: `
+                @keyframes scanner-sweep {
+                    0% { top: 0%; opacity: 0.3; }
+                    10% { opacity: 1; }
+                    90% { opacity: 1; }
+                    100% { top: 100%; transform: translateY(-100%); opacity: 0.3; }
+                }
+                @keyframes scanner-pulse {
+                    0%, 100% { opacity: 0.08; }
+                    50% { opacity: 0.25; }
+                }
+                @keyframes corner-glow {
+                    0%, 100% { border-color: rgba(167, 139, 250, 0.6); }
+                    50% { border-color: rgba(192, 132, 252, 1); filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6)); }
+                }
+                .animate-scanner-sweep {
+                    animation: scanner-sweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+                }
+                .animate-scanner-pulse {
+                    animation: scanner-pulse 1.8s ease-in-out infinite;
+                }
+                .animate-corner-glow {
+                    animation: corner-glow 1.8s ease-in-out infinite;
+                }
+            `}} />
 
             {/* ── Header ── */}
             {!isEditDetails && (
@@ -297,14 +322,16 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         {/* Scan box */}
                         <div className="relative w-72 h-44 z-10"
                              style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
-                            <div className="absolute inset-0 rounded-2xl border-2 border-violet-400/80" />
-                            {/* Animated scan line */}
-                            <div className="absolute inset-x-4 top-1/2 h-px bg-gradient-to-r from-transparent via-violet-400 to-transparent animate-pulse" />
+                            <div className="absolute inset-0 rounded-2xl border-2 border-violet-500/20" />
+                            {/* Pulsing scanner overlay */}
+                            <div className="absolute inset-0 rounded-2xl bg-violet-400/10 animate-scanner-pulse" />
+                            {/* Sweeping laser line */}
+                            <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-violet-400 to-transparent shadow-[0_0_8px_2px_rgba(167,139,250,0.6)] animate-scanner-sweep" />
                             {/* Corner marks */}
-                            <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-violet-300 rounded-tl-2xl" />
-                            <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-violet-300 rounded-tr-2xl" />
-                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-violet-300 rounded-bl-2xl" />
-                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-violet-300 rounded-br-2xl" />
+                            <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 rounded-tl-2xl animate-corner-glow" />
+                            <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 rounded-tr-2xl animate-corner-glow" />
+                            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 rounded-bl-2xl animate-corner-glow" />
+                            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 rounded-br-2xl animate-corner-glow" />
                         </div>
                         <p className="relative z-10 text-white/70 text-sm mt-5 font-medium">
                             <ScanLine size={14} className="inline mr-1.5 mb-0.5" />
