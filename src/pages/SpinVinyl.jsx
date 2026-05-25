@@ -1703,8 +1703,8 @@ export const SpinVinyl = () => {
             <div className={activePage !== 'collection' ? 'hidden' : ''}>
             {/* Hero — compact on mobile */}
             <div className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)]" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent_50%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(139,92,246,0.15),transparent_60%)] pointer-events-none" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(236,72,153,0.1),transparent_50%)] pointer-events-none" />
                 <div className="relative max-w-7xl mx-auto px-4 sm:px-6 pt-10 sm:pt-16 pb-4 sm:pb-12 pt-safe-header">
                     {/* Header Row — Stacked on mobile, side-by-side on tablet+ */}
                     <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6 sm:gap-4 mb-8 sm:mb-12">
