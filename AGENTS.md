@@ -32,4 +32,25 @@ This is a Vite + React application with serverless API routes in `/api` (proxied
 * **Architectural Guardrails:** Act as the Senior Lead. If the "vibe" or direction provided creates technical debt or security holes, flag it immediately before writing the code.
 * **Implicit Handling:** Automatically include robust error handling, basic logging, and edge-case management. The user should not have to "police" the quality of the logic.
 * **DRY & Modular:** Proactively refactor repeated logic into reusable hooks or components. Focus on building a "system," not just a collection of scripts.
+
+# UI/UX Consistency Agent Guidelines
+
+## 1. Visual & Style Consistency
+* **Strict Theme Adherence:** Never use arbitrary Tailwind values (e.g., `text-[#1e293b]`, `p-[13px]`) or hardcoded hex colors. Use the Tailwind configuration theme scale, semantic utility classes, and CSS variables.
+* **Typography Scale:** Maintain hierarchy using standard Tailwind typography scale (e.g., `text-xs`, `text-sm`, `text-base`, `text-lg`, `text-xl`, etc.). Ensure headings use standard weights (`font-semibold` or `font-bold`) and tracking.
+* **Component Cohesion:** Ensure custom UI elements (buttons, inputs, cards, dropdowns) match existing components in design, border radius, padding, border thickness, and box shadow.
+
+## 2. Interaction & State Design
+* **Feedback States:** Ensure all interactive elements have visual transitions for `hover:`, `active:`, `focus-visible:`, and `disabled:` states.
+* **Transitions:** Apply smooth, subtle transitions (e.g., `transition-colors duration-200 ease-in-out` or `transition-all duration-300`) to avoid jarring visual jumps.
+* **Loading & Empty States:** Implement elegant skeleton loaders, spinner states, or placeholder states for all async/data-fetching components.
+
+## 3. Responsive & Mobile-First Layouts
+* **Fluid Layouts:** Design starting from mobile (`320px` width) and scale up using Tailwind responsive breakpoints. Never allow horizontal overflows or clipped text.
+* **Touch Targets:** Ensure interactive elements on mobile have a minimum touch target size of `44x44px` (or `p-3`/`p-4` spacing equivalent).
+
+## 4. Accessibility & Semantics
+* **Semantic HTML:** Always prefer native semantic elements (e.g., `<button>` for actions, `<nav>` for navigation) over generic `<div>` click handlers.
+* **A11y Tags:** Apply standard `aria-label`, `aria-expanded`, and keyboard navigation support (`tabIndex`, `onKeyDown`) to custom widgets.
+* **Color Contrast:** Keep color combinations readable and compliant with WCAG AA standards.
 <!-- END:nextjs-agent-rules -->
