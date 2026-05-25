@@ -47,6 +47,26 @@ const saveUpcomingWantlist = (map) => {
     catch { }
 };
 
+// ─── Upcoming monitoring preferences ─────────────────────────────
+
+const UPCOMING_PREFS_LS_KEY = 'spinvinyl_upcoming_prefs';
+
+const loadUpcomingPrefs = () => {
+    try {
+        const raw = localStorage.getItem(UPCOMING_PREFS_LS_KEY);
+        if (!raw) return { customArtists: [], customGenres: [] };
+        const p = JSON.parse(raw);
+        return {
+            customArtists: Array.isArray(p.customArtists) ? p.customArtists : [],
+            customGenres:  Array.isArray(p.customGenres)  ? p.customGenres  : [],
+        };
+    } catch { return { customArtists: [], customGenres: [] }; }
+};
+
+const saveUpcomingPrefs = (prefs) => {
+    try { localStorage.setItem(UPCOMING_PREFS_LS_KEY, JSON.stringify(prefs)); } catch {}
+};
+
 // ─── Shared helpers ───────────────────────────────────────────────
 
 const cleanName = (name) => (name || '').replace(/\s*\(\d+\)\s*$/, '').trim();
@@ -360,6 +380,21 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     });
     const [toastMsg, setToastMsg] = useState(null);
 
+    const MAX_CUSTOM = 20;
+    const [customArtists, setCustomArtists] = useState(() => loadUpcomingPrefs().customArtists);
+    const [customGenres,  setCustomGenres]  = useState(() => loadUpcomingPrefs().customGenres);
+    const [panelOpen,     setPanelOpen]     = useState(false);
+
+    const [artistInput,    setArtistInput]    = useState('');
+    const [artistDropOpen, setArtistDropOpen] = useState(false);
+    const artistInputRef = useRef(null);
+    const artistDropRef  = useRef(null);
+
+    const [genreInput,    setGenreInput]    = useState('');
+    const [genreDropOpen, setGenreDropOpen] = useState(false);
+    const genreInputRef = useRef(null);
+    const genreDropRef  = useRef(null);
+
     const addToWantlist = useCallback((e, release) => {
         e.stopPropagation();
         const key = release.raw;
@@ -377,6 +412,29 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
         }
         setTimeout(() => setToastMsg(null), 2500);
     }, []);
+
+    const collectionArtistNames = useMemo(() => {
+        if (!collection?.length) return [];
+        const seen = new Set();
+        const out = [];
+        collection.forEach(r => {
+            (r.basic_information?.artists ?? []).forEach(a => {
+                const name = cleanName(a.name);
+                const norm = normalizeArtist(name);
+                if (norm.length > 1 && !seen.has(norm) && !/^various/i.test(name)) {
+                    seen.add(norm);
+                    out.push(name);
+                }
+            });
+        });
+        return out.sort((a, b) => a.localeCompare(b));
+    }, [collection]);
+
+    const allGenreOptions = useMemo(() => {
+        const s = new Set(genrePrefs ?? []);
+        upcoming.forEach(r => (r.genres ?? []).forEach(g => s.add(g)));
+        return [...s].sort((a, b) => a.localeCompare(b));
+    }, [genrePrefs, upcoming]);
 
     // ── Build artist/genre profile from the parent's full collection ──
     useEffect(() => {
@@ -447,21 +505,38 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
     useEffect(() => { fetchUpcoming(); }, [fetchUpcoming]);
 
+    // ── Effective sets merge collection-derived + user custom picks ──
+    const effectiveArtistSet = useMemo(() => {
+        if (!artistSet) return null;
+        if (customArtists.length === 0) return artistSet;
+        const merged = new Set(artistSet);
+        customArtists.forEach(a => merged.add(normalizeArtist(a)));
+        return merged;
+    }, [artistSet, customArtists]);
+
+    const effectiveGenrePrefs = useMemo(() => {
+        if (!genrePrefs) return null;
+        if (customGenres.length === 0) return genrePrefs;
+        const merged = new Set(genrePrefs);
+        customGenres.forEach(g => merged.add(g));
+        return merged;
+    }, [genrePrefs, customGenres]);
+
     // ── Annotate upcoming releases ────────────────────────────────────
     const annotatedUpcoming = useMemo(() => {
         if (!Array.isArray(upcoming)) return [];
-        if (!artistSet || upcoming.length === 0) return upcoming;
-        
+        if (!effectiveArtistSet || upcoming.length === 0) return upcoming;
+
         return upcoming.map(r => {
             // Use artist field directly if available (scraper provides it separately)
             const normArtist = r.artist ? normalizeArtist(r.artist) : null;
-            const artistMatch = (normArtist && artistSet.has(normArtist)) ? normArtist : matchesArtist(r.raw, artistSet);
+            const artistMatch = (normArtist && effectiveArtistSet.has(normArtist)) ? normArtist : matchesArtist(r.raw, effectiveArtistSet);
             if (artistMatch) {
                 const genres = artistGenres?.get(artistMatch) ? [...artistGenres.get(artistMatch)].slice(0, 4) : [];
                 return { ...r, isForYou: true, _matchedArtist: r.artist || artistMatch, _genres: genres };
             }
-            if (genrePrefs?.size > 0 && r.genres?.length > 0) {
-                const matching = r.genres.filter(g => genrePrefs.has(g));
+            if (effectiveGenrePrefs?.size > 0 && r.genres?.length > 0) {
+                const matching = r.genres.filter(g => effectiveGenrePrefs.has(g));
                 if (matching.length > 0) {
                     const weightedScore = matching.reduce((s, g) => s + (genreWeights?.get(g) ?? 0), 0);
                     const sortedGenres = [...matching].sort((a, b) => (genreWeights?.get(b) ?? 0) - (genreWeights?.get(a) ?? 0));
@@ -470,7 +545,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             }
             return r;
         });
-    }, [upcoming, artistSet, artistGenres, genrePrefs, genreWeights]);
+    }, [upcoming, effectiveArtistSet, artistGenres, effectiveGenrePrefs, genreWeights]);
 
     const groupedReleases = useMemo(() => {
         const groups = {};
