@@ -567,6 +567,57 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             });
     }, [annotatedUpcoming]);
 
+    const addCustomArtist = useCallback((name) => {
+        const trimmed = name.trim();
+        if (!trimmed || customArtists.length >= MAX_CUSTOM) return;
+        const norm = normalizeArtist(trimmed);
+        if (customArtists.some(a => normalizeArtist(a) === norm)) return;
+        setCustomArtists(prev => [...prev, trimmed]);
+        setArtistInput('');
+        setArtistDropOpen(false);
+    }, [customArtists]);
+
+    const removeCustomArtist = useCallback((name) => {
+        setCustomArtists(prev => prev.filter(a => a !== name));
+    }, []);
+
+    const addCustomGenre = useCallback((name) => {
+        const trimmed = name.trim();
+        if (!trimmed || customGenres.length >= MAX_CUSTOM) return;
+        if (customGenres.some(g => g.toLowerCase() === trimmed.toLowerCase())) return;
+        setCustomGenres(prev => [...prev, trimmed]);
+        setGenreInput('');
+        setGenreDropOpen(false);
+    }, [customGenres]);
+
+    const removeCustomGenre = useCallback((name) => {
+        setCustomGenres(prev => prev.filter(g => g !== name));
+    }, []);
+
+    useEffect(() => {
+        saveUpcomingPrefs({ customArtists, customGenres });
+    }, [customArtists, customGenres]);
+
+    useEffect(() => {
+        const handle = (e) => {
+            if (e.type === 'keydown' && e.key === 'Escape') {
+                setArtistDropOpen(false);
+                setGenreDropOpen(false);
+                return;
+            }
+            if (artistDropRef.current && !artistDropRef.current.contains(e.target) && !artistInputRef.current?.contains(e.target))
+                setArtistDropOpen(false);
+            if (genreDropRef.current && !genreDropRef.current.contains(e.target) && !genreInputRef.current?.contains(e.target))
+                setGenreDropOpen(false);
+        };
+        document.addEventListener('mousedown', handle);
+        document.addEventListener('keydown', handle);
+        return () => {
+            document.removeEventListener('mousedown', handle);
+            document.removeEventListener('keydown', handle);
+        };
+    }, []);
+
     const formatDate = (isoDate) => {
         try {
             return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', {
@@ -640,7 +691,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             )}
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-2">
                 <div>
                     <h2 className="text-base font-bold text-white">Upcoming Vinyl Releases</h2>
                     <p className="text-xs text-gray-500 mt-0.5">
@@ -649,6 +700,17 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     </p>
                 </div>
                 <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={() => setPanelOpen(o => !o)}
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                            panelOpen || customArtists.length > 0 || customGenres.length > 0
+                                ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
+                                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                        }`}
+                        title="Customize monitoring"
+                    >
+                        Customize {panelOpen ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                    </button>
                     <button
                         onClick={() => setViewMode('list')}
                         className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
@@ -673,6 +735,154 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     </button>
                 </div>
             </div>
+
+            {/* Customize monitoring panel */}
+            {panelOpen && (
+                <div className="mb-4 p-3 rounded-2xl bg-white/[0.03] border border-white/[0.07] space-y-3">
+                    {/* Artists */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Artist Match
+                            <span className="ml-1 text-gray-600 normal-case font-normal">— violet badge</span>
+                        </p>
+                        {customArtists.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {customArtists.map(name => (
+                                    <span key={name} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/25">
+                                        {name}
+                                        <button onClick={() => removeCustomArtist(name)} className="hover:text-violet-100 transition-colors" aria-label={`Remove ${name}`}>
+                                            <X size={9} />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {customArtists.length < MAX_CUSTOM && (
+                            <div className="relative">
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus-within:border-violet-500/50 transition-colors">
+                                    <input
+                                        ref={artistInputRef}
+                                        type="text"
+                                        value={artistInput}
+                                        onChange={e => { setArtistInput(e.target.value); setArtistDropOpen(true); }}
+                                        onFocus={() => artistInput && setArtistDropOpen(true)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && artistInput.trim()) addCustomArtist(artistInput);
+                                            if (e.key === 'Escape') setArtistDropOpen(false);
+                                        }}
+                                        placeholder="Add artist…"
+                                        className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none"
+                                    />
+                                    {artistInput && (
+                                        <button onClick={() => { setArtistInput(''); setArtistDropOpen(false); }} className="text-gray-600 hover:text-gray-400 transition-colors">
+                                            <X size={10} />
+                                        </button>
+                                    )}
+                                </div>
+                                {artistDropOpen && artistInput.trim().length > 0 && (() => {
+                                    const q = normalizeArtist(artistInput);
+                                    const results = collectionArtistNames
+                                        .filter(name => normalizeArtist(name).includes(q))
+                                        .filter(name => !customArtists.some(a => normalizeArtist(a) === normalizeArtist(name)))
+                                        .slice(0, 8);
+                                    return (
+                                        <div ref={artistDropRef} className="absolute top-full mt-1 left-0 right-0 z-20 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                                            <button
+                                                onClick={() => addCustomArtist(artistInput)}
+                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 border-b border-white/5 text-xs text-violet-300 font-semibold transition-colors"
+                                            >
+                                                + Add &ldquo;{artistInput.trim()}&rdquo;
+                                            </button>
+                                            {results.map(name => (
+                                                <button
+                                                    key={name}
+                                                    onClick={() => addCustomArtist(name)}
+                                                    className="w-full px-3 py-2.5 text-left hover:bg-white/5 text-xs text-white border-b border-white/5 last:border-0 transition-colors"
+                                                >
+                                                    {name}
+                                                </button>
+                                            ))}
+                                            {results.length === 0 && (
+                                                <p className="px-3 py-2 text-[10px] text-gray-600">No collection match — press Enter or click above to add</p>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Genres */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                            Genre Match
+                            <span className="ml-1 text-gray-600 normal-case font-normal">— pink badge</span>
+                        </p>
+                        {customGenres.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {customGenres.map(name => (
+                                    <span key={name} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-500/15 text-pink-300 border border-pink-500/25">
+                                        {name}
+                                        <button onClick={() => removeCustomGenre(name)} className="hover:text-pink-100 transition-colors" aria-label={`Remove ${name}`}>
+                                            <X size={9} />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {customGenres.length < MAX_CUSTOM && (
+                            <div className="relative">
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus-within:border-pink-500/50 transition-colors">
+                                    <input
+                                        ref={genreInputRef}
+                                        type="text"
+                                        value={genreInput}
+                                        onChange={e => { setGenreInput(e.target.value); setGenreDropOpen(true); }}
+                                        onFocus={() => genreInput && setGenreDropOpen(true)}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter' && genreInput.trim()) addCustomGenre(genreInput);
+                                            if (e.key === 'Escape') setGenreDropOpen(false);
+                                        }}
+                                        placeholder="Add genre…"
+                                        className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none"
+                                    />
+                                    {genreInput && (
+                                        <button onClick={() => { setGenreInput(''); setGenreDropOpen(false); }} className="text-gray-600 hover:text-gray-400 transition-colors">
+                                            <X size={10} />
+                                        </button>
+                                    )}
+                                </div>
+                                {genreDropOpen && genreInput.trim().length > 0 && (() => {
+                                    const q = genreInput.trim().toLowerCase();
+                                    const results = allGenreOptions
+                                        .filter(g => g.toLowerCase().includes(q))
+                                        .filter(g => !customGenres.some(c => c.toLowerCase() === g.toLowerCase()))
+                                        .slice(0, 8);
+                                    return (
+                                        <div ref={genreDropRef} className="absolute top-full mt-1 left-0 right-0 z-20 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                                            <button
+                                                onClick={() => addCustomGenre(genreInput)}
+                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 border-b border-white/5 text-xs text-pink-300 font-semibold transition-colors"
+                                            >
+                                                + Add &ldquo;{genreInput.trim()}&rdquo;
+                                            </button>
+                                            {results.map(g => (
+                                                <button
+                                                    key={g}
+                                                    onClick={() => addCustomGenre(g)}
+                                                    className="w-full px-3 py-2.5 text-left hover:bg-white/5 text-xs text-white border-b border-white/5 last:border-0 transition-colors"
+                                                >
+                                                    {g}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Loading skeleton */}
             {loading && (
