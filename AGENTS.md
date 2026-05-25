@@ -53,4 +53,35 @@ This is a Vite + React application with serverless API routes in `/api` (proxied
 * **Semantic HTML:** Always prefer native semantic elements (e.g., `<button>` for actions, `<nav>` for navigation) over generic `<div>` click handlers.
 * **A11y Tags:** Apply standard `aria-label`, `aria-expanded`, and keyboard navigation support (`tabIndex`, `onKeyDown`) to custom widgets.
 * **Color Contrast:** Keep color combinations readable and compliant with WCAG AA standards.
+
+# Serverless API & Backend Agent Guidelines
+
+## 1. Request Handling & Security
+* **Method Enforcement:** Validate the HTTP method (GET, POST, etc.) at the entry point of every serverless function. Reject disallowed methods with a `405 Method Not Allowed` status.
+* **Input Validation:** Sanitize and validate all incoming query parameters and body payloads before processing. Return `400 Bad Request` with helpful validation errors.
+* **Safe Secrets Access:** Never expose system environment variables (e.g., API keys, service tokens) to the client. Keep them securely referenced in `/api` routes via `process.env`.
+
+## 2. Response Formats & Error Handling
+* **Standardized JSON:** Ensure all serverless endpoints return consistent JSON payloads with structured error wrappers `{ error: "Description of the failure" }` on failure.
+* **Defensive Boundaries:** Wrap internal calls (database, external Discogs APIs) in `try-catch` blocks to prevent unhandled node process exceptions, returning appropriate HTTP statuses (e.g., `500 Internal Server Error`, `502 Bad Gateway`).
+
+# State & Performance Agent Guidelines
+
+## 1. Rendering & Dependency Safety
+* **Effect Cleanup:** Every event listener, timer, scanner stream, and intersection observer must return a cleanup function in `useEffect` to prevent memory leaks.
+* **Dependency Array Integrity:** Avoid empty dependencies in `useEffect`/`useCallback` unless explicitly intended for mounts. Include all referenced state/props to avoid stale closures.
+* **Stale Closure Mitigation:** Use `useRef` for tracking state variables in event loops or callbacks where reading the most up-to-date value is critical.
+
+## 2. API Caching & State Hydration
+* **Deduplicate Network Calls:** Implement local storage or memory caching for repetitive fetch requests (e.g., Discogs folders, releases lists) to avoid rate limits and unnecessary network overhead.
+* **Loading Boundaries:** Coordinate initial page mounts with skeleton states to prevent content layouts from layout-shifting.
+
+# Hardware & Camera Integration Agent Guidelines
+
+## 1. Stream & Resource Lifecycle
+* **Explicit Track Stop:** When stopping cameras, always iterate and stop all tracks (`track.stop()`) on the underlying `MediaStream` to turn off the hardware light indicator immediately.
+* **Lazy Loading Heavy SDKs:** Lazily import heavy scanning and hardware libraries (e.g., ZXing, Tesseract) using dynamic `import()` to optimize the bundle size.
+
+## 2. Graceful Degradation
+* **Permission Fallbacks:** Handle permission rejection (`NotAllowedError`) or absence of device hardware gracefully by offering manual input forms. Never leave the UI stuck in a loading or blank state.
 <!-- END:nextjs-agent-rules -->
