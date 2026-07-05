@@ -79,11 +79,11 @@ const SOURCE_COLORS = {
     // Popular artists + tours
     'Rolling Stone':  'bg-red-500/20 text-red-300 border-red-500/30',
     'BrooklynVegan':  'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-    'Consequence':    'bg-violet-500/20 text-violet-300 border-violet-500/30',
+    'Consequence':    'bg-terracotta-500/20 text-terracotta-300 border-terracotta-500/30',
     'Stereogum':      'bg-teal-500/20 text-teal-300 border-teal-500/30',
     // Broad music news
     'Pitchfork':      'bg-green-500/20 text-green-300 border-green-500/30',
-    'NME':            'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    'NME':            'bg-brass-500/20 text-brass-300 border-brass-500/30',
 };
 
 // ─── Completion Ring SVG ──────────────────────────────────────────
@@ -93,14 +93,14 @@ const CompletionRing = ({ pct, size = 56 }) => {
     const circ = 2 * Math.PI * r;
     const dash = Math.max(0, (pct / 100) * circ);
     const cx = size / 2, cy = size / 2;
-    const color = pct >= 75 ? '#34d399' : pct >= 40 ? '#a78bfa' : '#f472b6';
+    const color = pct >= 75 ? '#34d399' : pct >= 40 ? '#D97748' : '#D9B463';
 
     return (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
             <defs>
                 <linearGradient id={`rg-${pct}`} x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="#8b5cf6" />
-                    <stop offset="100%" stopColor="#ec4899" />
+                    <stop offset="0%" stopColor="#C4622D" />
+                    <stop offset="100%" stopColor="#C9A24B" />
                 </linearGradient>
             </defs>
             <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={size * 0.07} />
@@ -237,7 +237,7 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
+            <div className="w-full max-w-lg bg-stone-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
                 <button
                     onClick={onClose}
                     className="absolute top-4 right-4 z-10 w-10 h-10 min-w-[44px] min-h-[44px] rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors active:opacity-70"
@@ -247,21 +247,21 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
 
                 <div className="overflow-y-auto p-6 pb-10 flex-1 min-h-0">
                     <div className="flex flex-col items-center text-center">
-                        <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-gray-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
+                        <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-stone-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
                             {thumb ? (
                                 <img src={thumb} alt={title} className="w-full h-full object-cover" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                    <Disc3 size={48} className="text-gray-600" />
+                                    <Disc3 size={48} className="text-stone-600" />
                                 </div>
                             )}
                         </div>
                         <h2 className="text-2xl font-bold text-white leading-tight">{title}</h2>
-                        <p className="text-lg text-gray-400 mt-1">{artist}</p>
-                        <div className="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
+                        <p className="text-lg text-stone-400 mt-1">{artist}</p>
+                        <div className="flex items-center gap-2 mt-3 text-sm text-stone-500 font-medium">
                             <span>Upcoming Release</span>
                             <span>·</span>
-                            <span className="text-violet-400 font-bold">{release.releaseDate}</span>
+                            <span className="text-terracotta-400 font-bold">{release.releaseDate}</span>
                             {addToWantlist && (() => {
                                 const wState = wantlistState?.[release.raw];
                                 return (
@@ -270,14 +270,14 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
                                         disabled={wState === 'pending'}
                                         className={`w-7 h-7 flex items-center justify-center rounded-full border transition-all ${
                                             wState === 'done'
-                                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-400'
+                                                ? 'bg-brass-500/20 border-brass-500/40 text-brass-400'
                                                 : wState === 'error'
                                                 ? 'bg-red-500/20 border-red-500/40 text-red-400'
-                                                : 'bg-white/5 border-white/10 text-gray-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400'
+                                                : 'bg-white/5 border-white/10 text-stone-400 hover:bg-brass-500/20 hover:border-brass-500/40 hover:text-brass-400'
                                         }`}
                                         title={wState === 'done' ? 'Added to Wantlist' : 'Add to Wantlist'}
                                     >
-                                        {wState === 'pending' ? <Loader2 size={13} className="animate-spin" /> : <Heart size={13} className={wState === 'done' ? 'fill-rose-400' : ''} />}
+                                        {wState === 'pending' ? <Loader2 size={13} className="animate-spin" /> : <Heart size={13} className={wState === 'done' ? 'fill-brass-400' : ''} />}
                                     </button>
                                 );
                             })()}
@@ -285,7 +285,7 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
                     </div>
 
                     <div className="mt-8">
-                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">About the Artist</h3>
+                        <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-2">About the Artist</h3>
                         {loadingBio ? (
                             <div className="space-y-2 animate-pulse">
                                 <div className="h-3 bg-white/5 rounded w-full" />
@@ -293,26 +293,26 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
                                 <div className="h-3 bg-white/5 rounded w-4/6" />
                             </div>
                         ) : bio ? (
-                            <div className="text-sm text-gray-400 leading-relaxed space-y-2">
+                            <div className="text-sm text-stone-400 leading-relaxed space-y-2">
                                 <p className="line-clamp-4">{bio.text}</p>
                                 {bio.url && (
-                                    <a href={bio.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 font-medium inline-flex items-center gap-1">
+                                    <a href={bio.url} target="_blank" rel="noopener noreferrer" className="text-terracotta-400 hover:text-terracotta-300 font-medium inline-flex items-center gap-1">
                                         Read more on Wikipedia <ExternalLink size={12} />
                                     </a>
                                 )}
                             </div>
                         ) : (
-                            <p className="text-sm text-gray-500 italic">No biography available.</p>
+                            <p className="text-sm text-stone-500 italic">No biography available.</p>
                         )}
                     </div>
 
                     {detail?.description && (
                         <div className="mt-8">
-                            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">About this Release</h3>
-                            <div className="text-sm text-gray-400 leading-relaxed space-y-2">
+                            <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-2">About this Release</h3>
+                            <div className="text-sm text-stone-400 leading-relaxed space-y-2">
                                 <p className="line-clamp-5">{detail.description}</p>
                                 {release.sourceUrl && (
-                                    <a href={release.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 font-medium inline-flex items-center gap-1">
+                                    <a href={release.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-terracotta-400 hover:text-terracotta-300 font-medium inline-flex items-center gap-1">
                                         Read more on Upcoming Vinyl <ExternalLink size={12} />
                                     </a>
                                 )}
@@ -322,11 +322,11 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
 
                     {detail?.tracklist?.length > 0 && (
                         <div className="mt-6">
-                            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Tracklist</h3>
+                            <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-2">Tracklist</h3>
                             <ol className="space-y-1">
                                 {detail.tracklist.map((track, i) => (
-                                    <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
-                                        <span className="text-gray-600 w-5 flex-shrink-0 text-right">{i + 1}.</span>
+                                    <li key={i} className="flex items-start gap-2 text-sm text-stone-400">
+                                        <span className="text-stone-600 w-5 flex-shrink-0 text-right">{i + 1}.</span>
                                         <span>{track}</span>
                                     </li>
                                 ))}
@@ -335,13 +335,13 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
                     )}
 
                     <div className="mt-8 space-y-3">
-                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Links</h3>
+                        <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-3">Links</h3>
                         <div className="grid grid-cols-2 gap-3 pb-8 sm:pb-0">
                             <a
                                 href={release.searchUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
+                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
                             >
                                 <Disc3 size={16} /> Search Discogs
                             </a>
@@ -349,7 +349,7 @@ const UpcomingReleaseModal = ({ release, onClose, addToWantlist, wantlistState }
                                 href={amazonUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
+                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
                             >
                                 <ExternalLink size={16} /> Search Amazon
                             </a>
@@ -637,17 +637,17 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     {release.thumb ? (
                         <img src={release.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
                     ) : (
-                        <Disc3 size={16} className="text-gray-600" />
+                        <Disc3 size={16} className="text-stone-600" />
                     )}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white truncate leading-snug group-hover:text-violet-300 transition-colors">
+                    <p className="text-xs font-semibold text-white truncate leading-snug group-hover:text-terracotta-300 transition-colors">
                         {release.raw}
                     </p>
                     {release._genres?.length > 0 && (
                         <div className="flex gap-1 mt-0.5 flex-wrap">
                             {release._genres.map(g => (
-                                <span key={g} className="text-[9px] text-gray-500 bg-white/5 px-1 py-0.5 rounded">
+                                <span key={g} className="text-[9px] text-stone-500 bg-white/5 px-1 py-0.5 rounded">
                                     {g}
                                 </span>
                             ))}
@@ -655,12 +655,12 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     )}
                 </div>
                 {isForYou && (
-                    <span className="flex-shrink-0 text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded-md">
+                    <span className="flex-shrink-0 text-[10px] font-bold bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30 px-2 py-0.5 rounded-md">
                         ARTIST MATCH
                     </span>
                 )}
                 {isMightLike && (
-                    <span className="flex-shrink-0 text-[10px] font-bold bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-md whitespace-nowrap">
+                    <span className="flex-shrink-0 text-[10px] font-bold bg-brass-500/20 text-brass-300 border border-brass-500/30 px-2 py-0.5 rounded-md whitespace-nowrap">
                         GENRE MATCH
                     </span>
                 )}
@@ -669,14 +669,14 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     disabled={wState === 'pending'}
                     className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border transition-all opacity-0 group-hover:opacity-100 ${
                         wState === 'done'
-                            ? 'bg-rose-500/20 border-rose-500/40 text-rose-400 opacity-100'
+                            ? 'bg-brass-500/20 border-brass-500/40 text-brass-400 opacity-100'
                             : wState === 'error'
                             ? 'bg-red-500/20 border-red-500/40 text-red-400 opacity-100'
-                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-rose-500/20 hover:border-rose-500/40 hover:text-rose-400'
+                            : 'bg-white/5 border-white/10 text-stone-400 hover:bg-brass-500/20 hover:border-brass-500/40 hover:text-brass-400'
                     }`}
                     title={wState === 'done' ? 'Added to Wantlist' : 'Add to Wantlist'}
                 >
-                    {wState === 'pending' ? <Loader2 size={12} className="animate-spin" /> : <Heart size={12} className={wState === 'done' ? 'fill-rose-400' : ''} />}
+                    {wState === 'pending' ? <Loader2 size={12} className="animate-spin" /> : <Heart size={12} className={wState === 'done' ? 'fill-brass-400' : ''} />}
                 </button>
             </div>
         );
@@ -685,7 +685,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     return (
         <div>
             {toastMsg && (
-                <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] px-4 py-3 rounded-2xl text-sm font-semibold shadow-xl backdrop-blur-xl border transition-all ${toastMsg.startsWith('♡') ? 'bg-violet-900/90 text-violet-200 border-violet-500/30' : 'bg-rose-900/90 text-rose-200 border-rose-500/30'}`}>
+                <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] px-4 py-3 rounded-2xl text-sm font-semibold shadow-xl backdrop-blur-xl border transition-all ${toastMsg.startsWith('♡') ? 'bg-terracotta-900/90 text-terracotta-200 border-terracotta-500/30' : 'bg-brass-900/90 text-brass-200 border-brass-500/30'}`}>
                     {toastMsg}
                 </div>
             )}
@@ -694,9 +694,9 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             <div className="flex items-center justify-between mb-2">
                 <div>
                     <h2 className="text-base font-bold text-white">Upcoming Vinyl Releases</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-stone-500 mt-0.5">
                         From upcomingvinyl.com · personalized artists & genres from your collection
-                        {collectionLoading && <span className="ml-2 text-violet-400">Loading your collection…</span>}
+                        {collectionLoading && <span className="ml-2 text-terracotta-400">Loading your collection…</span>}
                     </p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -704,8 +704,8 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                         onClick={() => setPanelOpen(o => !o)}
                         className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
                             panelOpen || customArtists.length > 0 || customGenres.length > 0
-                                ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                                ? 'bg-terracotta-500/20 border-terracotta-500/40 text-terracotta-300'
+                                : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'
                         }`}
                         title="Customize monitoring"
                     >
@@ -713,14 +713,14 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     </button>
                     <button
                         onClick={() => setViewMode('list')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="List view"
                     >
                         <LayoutList size={14} />
                     </button>
                     <button
                         onClick={() => setViewMode('grid')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="Tile view"
                     >
                         <LayoutGrid size={14} />
@@ -728,7 +728,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     <button
                         onClick={() => fetchUpcoming(true)}
                         disabled={loading}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
                         title="Refresh"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -741,16 +741,16 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                 <div className="mb-4 p-3 rounded-2xl bg-white/[0.03] border border-white/[0.07] space-y-3">
                     {/* Artists */}
                     <div>
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                             Artist Match
-                            <span className="ml-1 text-gray-600 normal-case font-normal">— violet badge</span>
+                            <span className="ml-1 text-stone-600 normal-case font-normal">— violet badge</span>
                         </p>
                         {customArtists.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {customArtists.map(name => (
-                                    <span key={name} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/25">
+                                    <span key={name} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-terracotta-500/15 text-terracotta-300 border border-terracotta-500/25">
                                         {name}
-                                        <button onClick={() => removeCustomArtist(name)} className="hover:text-violet-100 transition-colors" aria-label={`Remove ${name}`}>
+                                        <button onClick={() => removeCustomArtist(name)} className="hover:text-terracotta-100 transition-colors" aria-label={`Remove ${name}`}>
                                             <X size={9} />
                                         </button>
                                     </span>
@@ -759,7 +759,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                         )}
                         {customArtists.length < MAX_CUSTOM && (
                             <div className="relative">
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus-within:border-violet-500/50 transition-colors">
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus-within:border-terracotta-500/50 transition-colors">
                                     <input
                                         ref={artistInputRef}
                                         type="text"
@@ -771,10 +771,10 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                             if (e.key === 'Escape') setArtistDropOpen(false);
                                         }}
                                         placeholder="Add artist…"
-                                        className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none"
+                                        className="flex-1 bg-transparent text-xs text-white placeholder-stone-600 outline-none"
                                     />
                                     {artistInput && (
-                                        <button onClick={() => { setArtistInput(''); setArtistDropOpen(false); }} className="text-gray-600 hover:text-gray-400 transition-colors">
+                                        <button onClick={() => { setArtistInput(''); setArtistDropOpen(false); }} className="text-stone-600 hover:text-stone-400 transition-colors">
                                             <X size={10} />
                                         </button>
                                     )}
@@ -786,10 +786,10 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                         .filter(name => !customArtists.some(a => normalizeArtist(a) === normalizeArtist(name)))
                                         .slice(0, 8);
                                     return (
-                                        <div ref={artistDropRef} className="absolute top-full mt-1 left-0 right-0 z-20 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                                        <div ref={artistDropRef} className="absolute top-full mt-1 left-0 right-0 z-20 bg-stone-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
                                             <button
                                                 onClick={() => addCustomArtist(artistInput)}
-                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 border-b border-white/5 text-xs text-violet-300 font-semibold transition-colors"
+                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 border-b border-white/5 text-xs text-terracotta-300 font-semibold transition-colors"
                                             >
                                                 + Add &ldquo;{artistInput.trim()}&rdquo;
                                             </button>
@@ -803,7 +803,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                                 </button>
                                             ))}
                                             {results.length === 0 && (
-                                                <p className="px-3 py-2 text-[10px] text-gray-600">No collection match — press Enter or click above to add</p>
+                                                <p className="px-3 py-2 text-[10px] text-stone-600">No collection match — press Enter or click above to add</p>
                                             )}
                                         </div>
                                     );
@@ -814,16 +814,16 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
                     {/* Genres */}
                     <div>
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                        <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                             Genre Match
-                            <span className="ml-1 text-gray-600 normal-case font-normal">— pink badge</span>
+                            <span className="ml-1 text-stone-600 normal-case font-normal">— pink badge</span>
                         </p>
                         {customGenres.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-2">
                                 {customGenres.map(name => (
-                                    <span key={name} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-500/15 text-pink-300 border border-pink-500/25">
+                                    <span key={name} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brass-500/15 text-brass-300 border border-brass-500/25">
                                         {name}
-                                        <button onClick={() => removeCustomGenre(name)} className="hover:text-pink-100 transition-colors" aria-label={`Remove ${name}`}>
+                                        <button onClick={() => removeCustomGenre(name)} className="hover:text-brass-100 transition-colors" aria-label={`Remove ${name}`}>
                                             <X size={9} />
                                         </button>
                                     </span>
@@ -832,7 +832,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                         )}
                         {customGenres.length < MAX_CUSTOM && (
                             <div className="relative">
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus-within:border-pink-500/50 transition-colors">
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl focus-within:border-brass-500/50 transition-colors">
                                     <input
                                         ref={genreInputRef}
                                         type="text"
@@ -844,10 +844,10 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                             if (e.key === 'Escape') setGenreDropOpen(false);
                                         }}
                                         placeholder="Add genre…"
-                                        className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none"
+                                        className="flex-1 bg-transparent text-xs text-white placeholder-stone-600 outline-none"
                                     />
                                     {genreInput && (
-                                        <button onClick={() => { setGenreInput(''); setGenreDropOpen(false); }} className="text-gray-600 hover:text-gray-400 transition-colors">
+                                        <button onClick={() => { setGenreInput(''); setGenreDropOpen(false); }} className="text-stone-600 hover:text-stone-400 transition-colors">
                                             <X size={10} />
                                         </button>
                                     )}
@@ -859,10 +859,10 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                         .filter(g => !customGenres.some(c => c.toLowerCase() === g.toLowerCase()))
                                         .slice(0, 8);
                                     return (
-                                        <div ref={genreDropRef} className="absolute top-full mt-1 left-0 right-0 z-20 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                                        <div ref={genreDropRef} className="absolute top-full mt-1 left-0 right-0 z-20 bg-stone-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
                                             <button
                                                 onClick={() => addCustomGenre(genreInput)}
-                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 border-b border-white/5 text-xs text-pink-300 font-semibold transition-colors"
+                                                className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/5 border-b border-white/5 text-xs text-brass-300 font-semibold transition-colors"
                                             >
                                                 + Add &ldquo;{genreInput.trim()}&rdquo;
                                             </button>
@@ -895,7 +895,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
             {/* Error */}
             {error && (
-                <div className="text-center py-10 text-rose-400 text-sm flex flex-col items-center gap-2">
+                <div className="text-center py-10 text-brass-400 text-sm flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
                     <p>{error}</p>
                 </div>
@@ -913,7 +913,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
             {/* Empty state */}
             {!loading && !error && upcoming.length === 0 && (
-                <div className="text-center py-12 text-gray-500 text-sm">
+                <div className="text-center py-12 text-stone-500 text-sm">
                     <Disc3 size={36} className="mx-auto mb-3 opacity-20" />
                     <p>No upcoming releases found.</p>
                 </div>
@@ -921,7 +921,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
 
             {/* No personalized matches nudge */}
             {!loading && !error && annotatedUpcoming.length > 0 && !annotatedUpcoming.some(r => r.isForYou || r.isMightLike) && (
-                <div className="mb-4 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-gray-500">
+                <div className="mb-4 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-xs text-stone-500">
                     No artist or genre matches found in your collection — add more records to personalise this list.
                 </div>
             )}
@@ -935,7 +935,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                 href="https://upcomingvinyl.com/featured"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-[11px] font-semibold text-gray-500 hover:text-violet-400 uppercase tracking-wider mb-1 px-1 inline-flex items-center gap-1 transition-colors"
+                                className="text-[11px] font-semibold text-stone-500 hover:text-terracotta-400 uppercase tracking-wider mb-1 px-1 inline-flex items-center gap-1 transition-colors"
                             >
                                 {formatDate(date)} <ExternalLink size={9} />
                             </a>
@@ -953,19 +953,19 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                             <div
                                                 key={`${r.raw}-${i}`}
                                                 onClick={() => setSelectedRelease(r)}
-                                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 text-left cursor-pointer active:scale-[0.98] active:opacity-80"
+                                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-terracotta-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-terracotta-500/10 text-left cursor-pointer active:scale-[0.98] active:opacity-80"
                                             >
-                                                <div className="aspect-square bg-gray-800 relative overflow-hidden">
+                                                <div className="aspect-square bg-stone-800 relative overflow-hidden">
                                                     {r.thumb ? (
                                                         <img src={r.thumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center">
-                                                            <Disc3 size={28} className="text-gray-600" />
+                                                            <Disc3 size={28} className="text-stone-600" />
                                                         </div>
                                                     )}
                                                     {(r.isForYou || r.isMightLike) && (
                                                         <div className="absolute top-2 left-2">
-                                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${r.isForYou ? 'bg-violet-500/80 text-white border-violet-400/50' : 'bg-pink-500/80 text-white border-pink-400/50'}`}>
+                                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${r.isForYou ? 'bg-terracotta-500/80 text-white border-terracotta-400/50' : 'bg-brass-500/80 text-white border-brass-400/50'}`}>
                                                                 {r.isForYou ? 'ARTIST' : 'GENRE'}
                                                             </span>
                                                         </div>
@@ -975,19 +975,19 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                                                         disabled={wState === 'pending'}
                                                         className={`absolute top-2 right-2 w-7 h-7 flex items-center justify-center rounded-full border backdrop-blur-sm transition-all ${
                                                             wState === 'done'
-                                                                ? 'bg-rose-500/30 border-rose-400/60 text-rose-300'
+                                                                ? 'bg-brass-500/30 border-brass-400/60 text-brass-300'
                                                                 : wState === 'error'
                                                                 ? 'bg-red-500/30 border-red-400/60 text-red-300'
                                                                 : 'bg-black/50 border-white/20 text-white opacity-0 group-hover:opacity-100'
                                                         }`}
                                                         title={wState === 'done' ? 'Added to Wantlist' : 'Add to Wantlist'}
                                                     >
-                                                        {wState === 'pending' ? <Loader2 size={12} className="animate-spin" /> : <Heart size={12} className={wState === 'done' ? 'fill-rose-300' : ''} />}
+                                                        {wState === 'pending' ? <Loader2 size={12} className="animate-spin" /> : <Heart size={12} className={wState === 'done' ? 'fill-brass-300' : ''} />}
                                                     </button>
                                                 </div>
                                                 <div className="p-2.5">
-                                                    <p className="text-[11px] font-bold text-white truncate leading-tight group-hover:text-violet-300 transition-colors">{r.artist || r.raw}</p>
-                                                    <p className="text-[10px] text-gray-400 truncate mt-0.5">{r.title}</p>
+                                                    <p className="text-[11px] font-bold text-white truncate leading-tight group-hover:text-terracotta-300 transition-colors">{r.artist || r.raw}</p>
+                                                    <p className="text-[10px] text-stone-400 truncate mt-0.5">{r.title}</p>
                                                 </div>
                                             </div>
                                         );
@@ -1064,12 +1064,12 @@ const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Vinyl News</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Latest from Vinyl Factory, Pitchfork, Bandcamp Daily & NME</p>
+                    <p className="text-xs text-stone-500 mt-0.5">Latest from Vinyl Factory, Pitchfork, Bandcamp Daily & NME</p>
                 </div>
                 <button
                     onClick={() => fetchNews(true)}
                     disabled={loading}
-                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                    className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
                     title="Refresh"
                 >
                     <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -1092,14 +1092,14 @@ const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
             )}
 
             {error && (
-                <div className="text-center py-10 text-rose-400 text-sm flex flex-col items-center gap-2">
+                <div className="text-center py-10 text-brass-400 text-sm flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
                     <p>{error}</p>
                 </div>
             )}
 
             {!loading && !error && articles.length === 0 && (
-                <div className="text-center py-12 text-gray-500 text-sm">
+                <div className="text-center py-12 text-stone-500 text-sm">
                     <Newspaper size={36} className="mx-auto mb-3 opacity-20" />
                     <p>No articles loaded. Check your internet connection.</p>
                 </div>
@@ -1113,15 +1113,15 @@ const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
                             href={article.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex gap-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-violet-500/20 p-3 transition-all group"
+                            className="flex gap-3 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-terracotta-500/20 p-3 transition-all group"
                         >
                             {/* Thumbnail */}
-                            <div className="w-20 h-20 rounded-xl bg-gray-800 flex-shrink-0 overflow-hidden">
+                            <div className="w-20 h-20 rounded-xl bg-stone-800 flex-shrink-0 overflow-hidden">
                                 {article.image ? (
                                     <img src={article.image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center">
-                                        <Music2 size={20} className="text-gray-600" />
+                                        <Music2 size={20} className="text-stone-600" />
                                     </div>
                                 )}
                             </div>
@@ -1129,23 +1129,23 @@ const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
                             {/* Content */}
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${SOURCE_COLORS[article.source] || 'bg-gray-700/50 text-gray-400 border-gray-600'}`}>
+                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${SOURCE_COLORS[article.source] || 'bg-stone-700/50 text-stone-400 border-stone-600'}`}>
                                         {article.source}
                                     </span>
                                     {article._relevance >= 3 && (
-                                        <span className="text-[9px] font-bold text-violet-400 uppercase tracking-wider">● For You</span>
+                                        <span className="text-[9px] font-bold text-terracotta-400 uppercase tracking-wider">● For You</span>
                                     )}
                                 </div>
-                                <p className="text-sm font-semibold text-white leading-snug line-clamp-2 group-hover:text-violet-200 transition-colors">
+                                <p className="text-sm font-semibold text-white leading-snug line-clamp-2 group-hover:text-terracotta-200 transition-colors">
                                     {article.title}
                                 </p>
                                 {article.summary && (
-                                    <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2 leading-relaxed">{article.summary}</p>
+                                    <p className="text-[11px] text-stone-500 mt-0.5 line-clamp-2 leading-relaxed">{article.summary}</p>
                                 )}
-                                <p className="text-[10px] text-gray-600 mt-1">{formatDate(article.publishedAt)}</p>
+                                <p className="text-[10px] text-stone-600 mt-1">{formatDate(article.publishedAt)}</p>
                             </div>
 
-                            <ExternalLink size={14} className="text-gray-600 flex-shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <ExternalLink size={14} className="text-stone-600 flex-shrink-0 mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </a>
                     ))}
                 </div>
@@ -1243,19 +1243,19 @@ const WantlistSection = () => {
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Your Wantlist</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Records you've marked to complete your collection</p>
+                    <p className="text-xs text-stone-500 mt-0.5">Records you've marked to complete your collection</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                     <button
                         onClick={() => changeViewMode('list')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="List view"
                     >
                         <LayoutList size={14} />
                     </button>
                     <button
                         onClick={() => changeViewMode('grid')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-violet-500/20 border-violet-500/30 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="Tile view"
                     >
                         <LayoutGrid size={14} />
@@ -1263,7 +1263,7 @@ const WantlistSection = () => {
                     <button
                         onClick={() => fetchWantlist(true)}
                         disabled={loading}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
                         title="Refresh"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -1274,31 +1274,31 @@ const WantlistSection = () => {
             {/* Saved Upcoming Releases */}
             {savedUpcoming.length > 0 && (
                 <div className="mb-6">
-                    <p className="text-xs text-gray-500 mb-3">Saved from upcomingvinyl.com</p>
+                    <p className="text-xs text-stone-500 mb-3">Saved from upcomingvinyl.com</p>
                     {viewMode === 'grid' ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {savedUpcoming.map(r => (
-                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer active:scale-[0.98] active:opacity-80">
-                                    <div className="aspect-square bg-gray-800 relative overflow-hidden">
+                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-terracotta-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-terracotta-500/10 cursor-pointer active:scale-[0.98] active:opacity-80">
+                                    <div className="aspect-square bg-stone-800 relative overflow-hidden">
                                         {r.thumb ? (
                                             <img src={r.thumb} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
-                                                <Disc3 size={32} className="text-gray-600" />
+                                                <Disc3 size={32} className="text-stone-600" />
                                             </div>
                                         )}
                                         {r.releaseDate && (
-                                            <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm text-violet-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
+                                            <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm text-terracotta-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md">
                                                 {r.releaseDate}
                                             </div>
                                         )}
-                                        <button onClick={() => removeSavedUpcoming(r.raw)} className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-rose-500/80 backdrop-blur rounded-full flex items-center justify-center text-white border border-white/10 opacity-0 group-hover:opacity-100 transition-all shadow-xl" title="Remove">
+                                        <button onClick={() => removeSavedUpcoming(r.raw)} className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-brass-500/80 backdrop-blur rounded-full flex items-center justify-center text-white border border-white/10 opacity-0 group-hover:opacity-100 transition-all shadow-xl" title="Remove">
                                             <Trash2 size={12} />
                                         </button>
                                     </div>
                                     <div className="p-3">
-                                        <p className="text-xs font-bold text-white truncate leading-tight group-hover:text-violet-300 transition-colors">{r.artist}</p>
-                                        <p className="text-[11px] text-gray-400 truncate mt-0.5">{r.title}</p>
+                                        <p className="text-xs font-bold text-white truncate leading-tight group-hover:text-terracotta-300 transition-colors">{r.artist}</p>
+                                        <p className="text-[11px] text-stone-400 truncate mt-0.5">{r.title}</p>
                                     </div>
                                 </div>
                             ))}
@@ -1306,29 +1306,29 @@ const WantlistSection = () => {
                     ) : (
                         <div className="space-y-1">
                             {savedUpcoming.map(r => (
-                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]">
-                                    <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
+                                <div key={r.raw} onClick={() => setSelectedUpcoming(r)} className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-terracotta-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]">
+                                    <div className="w-10 h-10 rounded-lg bg-stone-800 flex-shrink-0 overflow-hidden border border-white/10">
                                         {r.thumb ? (
                                             <img src={r.thumb} alt="" className="w-full h-full object-cover" loading="lazy" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center">
-                                                <Disc3 size={16} className="text-gray-600" />
+                                                <Disc3 size={16} className="text-stone-600" />
                                             </div>
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold text-white truncate">{r.artist}</p>
-                                        <p className="text-[11px] text-gray-400 truncate">{r.title}</p>
+                                        <p className="text-[11px] text-stone-400 truncate">{r.title}</p>
                                     </div>
                                     {r.releaseDate && (
-                                        <span className="text-[10px] text-violet-400 font-semibold flex-shrink-0">{r.releaseDate}</span>
+                                        <span className="text-[10px] text-terracotta-400 font-semibold flex-shrink-0">{r.releaseDate}</span>
                                     )}
                                     {r.sourceUrl && (
-                                        <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-shrink-0 text-gray-600 hover:text-violet-400 transition-colors opacity-0 group-hover:opacity-100" title="View on Upcoming Vinyl">
+                                        <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="flex-shrink-0 text-stone-600 hover:text-terracotta-400 transition-colors opacity-0 group-hover:opacity-100" title="View on Upcoming Vinyl">
                                             <ExternalLink size={13} />
                                         </a>
                                     )}
-                                    <button onClick={() => removeSavedUpcoming(r.raw)} className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100" title="Remove">
+                                    <button onClick={() => removeSavedUpcoming(r.raw)} className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-stone-600 hover:text-brass-400 hover:bg-brass-500/10 transition-all opacity-0 group-hover:opacity-100" title="Remove">
                                         <Trash2 size={12} />
                                     </button>
                                 </div>
@@ -1346,14 +1346,14 @@ const WantlistSection = () => {
             )}
 
             {error && (
-                <div className="text-center py-10 text-rose-400 text-sm flex flex-col items-center gap-2">
+                <div className="text-center py-10 text-brass-400 text-sm flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
                     <p>{error}</p>
                 </div>
             )}
 
             {!loading && !error && wants.length === 0 && (
-                <div className="text-center py-12 text-gray-500 text-sm">
+                <div className="text-center py-12 text-stone-500 text-sm">
                     <Bookmark size={36} className="mx-auto mb-3 opacity-20" />
                     <p>Your wantlist is empty.</p>
                 </div>
@@ -1370,15 +1370,15 @@ const WantlistSection = () => {
                         return (
                             <div
                                 key={item.id}
-                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-violet-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/10 cursor-pointer text-left"
+                                className="group relative rounded-2xl bg-white/[0.03] border border-white/5 hover:border-terracotta-500/30 overflow-hidden transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-terracotta-500/10 cursor-pointer text-left"
                                 onClick={() => setSelectedRelease({ release: { ...info, label, type: 'release' }, artistName })}
                             >
-                                <div className="aspect-square bg-gray-800 relative overflow-hidden">
+                                <div className="aspect-square bg-stone-800 relative overflow-hidden">
                                     {img ? (
                                         <img src={img} alt={title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            <Disc3 size={32} className="text-gray-600" />
+                                            <Disc3 size={32} className="text-stone-600" />
                                         </div>
                                     )}
                                     {info.year && info.year !== 0 && (
@@ -1388,17 +1388,17 @@ const WantlistSection = () => {
                                     )}
                                 </div>
                                 <div className="p-3">
-                                    <p className="text-xs font-bold text-white truncate leading-tight group-hover:text-violet-300 transition-colors">{title}</p>
-                                    <p className="text-[11px] text-gray-400 truncate mt-0.5">{artistName}</p>
-                                    {label && <p className="text-[10px] text-gray-600 truncate mt-0.5">{label}</p>}
+                                    <p className="text-xs font-bold text-white truncate leading-tight group-hover:text-terracotta-300 transition-colors">{title}</p>
+                                    <p className="text-[11px] text-stone-400 truncate mt-0.5">{artistName}</p>
+                                    {label && <p className="text-[10px] text-stone-600 truncate mt-0.5">{label}</p>}
                                 </div>
                                 <button
                                     onClick={(e) => handleRemove(e, item.id)}
-                                    className="absolute bottom-3 right-3 w-7 h-7 bg-black/60 hover:bg-rose-500/80 backdrop-blur rounded-full flex items-center justify-center text-white border border-white/10 opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0 shadow-xl"
+                                    className="absolute bottom-3 right-3 w-7 h-7 bg-black/60 hover:bg-brass-500/80 backdrop-blur rounded-full flex items-center justify-center text-white border border-white/10 opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0 shadow-xl"
                                     title="Remove from Wantlist"
                                 >
                                     {removeState[item.id] === 'pending' ? <Loader2 size={12} className="animate-spin" /> :
-                                     removeState[item.id] === 'error' ? <AlertCircle size={12} className="text-rose-400" /> : <Trash2 size={12} />}
+                                     removeState[item.id] === 'error' ? <AlertCircle size={12} className="text-brass-400" /> : <Trash2 size={12} />}
                                 </button>
                             </div>
                         );
@@ -1417,32 +1417,32 @@ const WantlistSection = () => {
                         return (
                             <div
                                 key={item.id}
-                                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
+                                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 hover:border-terracotta-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
                                 onClick={() => setSelectedRelease({ release: { ...info, label, type: 'release' }, artistName })}
                             >
-                                <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden border border-white/10">
+                                <div className="w-10 h-10 rounded-lg bg-stone-800 flex-shrink-0 overflow-hidden border border-white/10">
                                     {img ? (
                                         <img src={img} alt={title} className="w-full h-full object-cover" loading="lazy" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            <Disc3 size={16} className="text-gray-600" />
+                                            <Disc3 size={16} className="text-stone-600" />
                                         </div>
                                     )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-white truncate group-hover:text-violet-300 transition-colors">{title}</p>
-                                    <p className="text-[11px] text-gray-400 truncate">{artistName}{label ? ` · ${label}` : ''}</p>
+                                    <p className="text-xs font-bold text-white truncate group-hover:text-terracotta-300 transition-colors">{title}</p>
+                                    <p className="text-[11px] text-stone-400 truncate">{artistName}{label ? ` · ${label}` : ''}</p>
                                 </div>
                                 {info.year && info.year !== 0 && (
-                                    <span className="text-[10px] text-gray-600 flex-shrink-0">{info.year}</span>
+                                    <span className="text-[10px] text-stone-600 flex-shrink-0">{info.year}</span>
                                 )}
                                 <button
                                     onClick={(e) => handleRemove(e, item.id)}
-                                    className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full text-gray-600 hover:text-rose-400 hover:bg-rose-500/10 transition-all opacity-0 group-hover:opacity-100"
+                                    className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full text-stone-600 hover:text-brass-400 hover:bg-brass-500/10 transition-all opacity-0 group-hover:opacity-100"
                                     title="Remove from Wantlist"
                                 >
                                     {removeState[item.id] === 'pending' ? <Loader2 size={12} className="animate-spin" /> :
-                                     removeState[item.id] === 'error' ? <AlertCircle size={12} className="text-rose-400" /> : <Trash2 size={12} />}
+                                     removeState[item.id] === 'error' ? <AlertCircle size={12} className="text-brass-400" /> : <Trash2 size={12} />}
                                 </button>
                             </div>
                         );
@@ -1505,7 +1505,7 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
+            <div className="w-full max-w-lg bg-stone-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[85dvh] sm:max-h-[90dvh]">
                 
                 {/* Close Button */}
                 <button
@@ -1518,18 +1518,18 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                 <div className="overflow-y-auto overflow-x-hidden p-6 flex-1 min-h-0 no-scrollbar">
                     {/* Header: Cover & Title */}
                     <div className="flex flex-col items-center text-center">
-                        <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-gray-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
+                        <div className="w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-stone-800 shadow-2xl overflow-hidden border border-white/10 mb-6 flex-shrink-0">
                             {release.thumb ? (
                                 <img src={release.thumb} alt={release.title} className="w-full h-full object-cover" />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center">
-                                    <Disc3 size={48} className="text-gray-600" />
+                                    <Disc3 size={48} className="text-stone-600" />
                                 </div>
                             )}
                         </div>
                         <h2 className="text-2xl font-bold text-white leading-tight">{release.title}</h2>
-                        <p className="text-lg text-gray-400 mt-1">{artistName}</p>
-                        <div className="flex items-center gap-2 mt-3 text-sm text-gray-500 font-medium">
+                        <p className="text-lg text-stone-400 mt-1">{artistName}</p>
+                        <div className="flex items-center gap-2 mt-3 text-sm text-stone-500 font-medium">
                             {release.year && <span>{release.year}</span>}
                             {release.year && release.label && <span>·</span>}
                             {release.label && <span>{release.label}</span>}
@@ -1538,7 +1538,7 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
 
                     {/* Bio Snippet */}
                     <div className="mt-8">
-                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">About the Artist</h3>
+                        <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-2">About the Artist</h3>
                         {loadingBio ? (
                             <div className="space-y-2 animate-pulse">
                                 <div className="h-3 bg-white/5 rounded w-full" />
@@ -1546,29 +1546,29 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                                 <div className="h-3 bg-white/5 rounded w-4/6" />
                             </div>
                         ) : bio ? (
-                            <div className="text-sm text-gray-400 leading-relaxed space-y-2">
+                            <div className="text-sm text-stone-400 leading-relaxed space-y-2">
                                 <p className="line-clamp-4">{bio.text}</p>
                                 {bio.url && (
-                                    <a href={bio.url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 font-medium inline-flex items-center gap-1">
+                                    <a href={bio.url} target="_blank" rel="noopener noreferrer" className="text-terracotta-400 hover:text-terracotta-300 font-medium inline-flex items-center gap-1">
                                         Read more on Wikipedia <ExternalLink size={12} />
                                     </a>
                                 )}
                             </div>
                         ) : (
-                            <p className="text-sm text-gray-500 italic">No biography available.</p>
+                            <p className="text-sm text-stone-500 italic">No biography available.</p>
                         )}
                     </div>
 
                     {/* Tracklist */}
                     {tracklist.length > 0 && (
                         <div className="mt-8">
-                            <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Tracklist</h3>
+                            <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-2">Tracklist</h3>
                             <ol className="space-y-1">
                                 {tracklist.map((track, i) => (
-                                    <li key={i} className="flex items-center gap-2 text-sm text-gray-400">
-                                        <span className="text-gray-600 w-6 flex-shrink-0 text-right text-xs">{track.position || i + 1}</span>
+                                    <li key={i} className="flex items-center gap-2 text-sm text-stone-400">
+                                        <span className="text-stone-600 w-6 flex-shrink-0 text-right text-xs">{track.position || i + 1}</span>
                                         <span className="flex-1 truncate">{track.title}</span>
-                                        {track.duration && <span className="text-xs text-gray-600 flex-shrink-0">{track.duration}</span>}
+                                        {track.duration && <span className="text-xs text-stone-600 flex-shrink-0">{track.duration}</span>}
                                     </li>
                                 ))}
                             </ol>
@@ -1579,14 +1579,14 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                     {(releaseDetail?.genres?.length > 0 || releaseDetail?.styles?.length > 0) && (
                         <div className="mt-6 flex flex-wrap gap-1.5">
                             {[...(releaseDetail.genres || []), ...(releaseDetail.styles || [])].map(g => (
-                                <span key={g} className="text-[10px] text-gray-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">{g}</span>
+                                <span key={g} className="text-[10px] text-stone-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">{g}</span>
                             ))}
                         </div>
                     )}
 
                     {/* Purchase Actions */}
                     <div className="mt-8 space-y-3">
-                        <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Options</h3>
+                        <h3 className="text-sm font-bold text-stone-300 uppercase tracking-wider mb-3">Options</h3>
                         
                         <button
                             onClick={() => addToWantlist(releaseId, release.title)}
@@ -1595,10 +1595,10 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                                 wState === 'done' 
                                     ? 'bg-green-500/10 text-green-400 border border-green-500/30' 
                                     : wState === 'error'
-                                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                                        ? 'bg-brass-500/10 text-brass-400 border border-brass-500/30'
                                         : wState === 'pending'
-                                            ? 'bg-white/5 text-gray-400 border border-white/10'
-                                            : 'bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/50'
+                                            ? 'bg-white/5 text-stone-400 border border-white/10'
+                                            : 'bg-terracotta-600 hover:bg-terracotta-500 text-white shadow-lg shadow-terracotta-900/50'
                             }`}
                         >
                             {wState === 'pending' ? <Loader2 size={16} className="animate-spin" /> :
@@ -1613,7 +1613,7 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                                 href={discogsUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
+                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
                             >
                                 <Disc3 size={16} /> Discogs
                             </a>
@@ -1621,7 +1621,7 @@ const MissingRecordModal = ({ releaseInfo, onClose, wantlistState, addToWantlist
                                 href={amazonUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
+                                className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/10 transition-colors text-sm font-semibold"
                             >
                                 <ExternalLink size={16} /> Amazon
                             </a>
@@ -1852,7 +1852,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         <div>
             {/* Wantlist Toast */}
             {toastMsg && (
-                <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] px-4 py-3 rounded-2xl text-sm font-semibold shadow-xl backdrop-blur-xl border transition-all ${toastMsg.startsWith('♡') ? 'bg-violet-900/90 text-violet-200 border-violet-500/30' : 'bg-rose-900/90 text-rose-200 border-rose-500/30'}`}>
+                <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-[200] px-4 py-3 rounded-2xl text-sm font-semibold shadow-xl backdrop-blur-xl border transition-all ${toastMsg.startsWith('♡') ? 'bg-terracotta-900/90 text-terracotta-200 border-terracotta-500/30' : 'bg-brass-900/90 text-brass-200 border-brass-500/30'}`}>
                     {toastMsg}
                 </div>
             )}
@@ -1870,7 +1870,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Complete Your Collection</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">Vinyl albums you don't own yet, by artists you collect</p>
+                    <p className="text-xs text-stone-500 mt-0.5">Vinyl albums you don't own yet, by artists you collect</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {/* Show complete toggle */}
@@ -1880,7 +1880,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
                             showComplete
                                 ? 'bg-green-500/15 border-green-500/30 text-green-400'
-                                : 'bg-white/5 border-white/10 text-gray-500 hover:text-gray-300'
+                                : 'bg-white/5 border-white/10 text-stone-500 hover:text-stone-300'
                         }`}
                         title={showComplete ? 'Hide complete artists' : 'Show complete artists'}
                     >
@@ -1892,8 +1892,8 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                         onClick={() => setSearchOpen(o => !o)}
                         className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
                             searchOpen
-                                ? 'bg-violet-500/20 border-violet-500/40 text-violet-300'
-                                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                                ? 'bg-terracotta-500/20 border-terracotta-500/40 text-terracotta-300'
+                                : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'
                         }`}
                     >
                         <Search size={10} /> Artist
@@ -1901,7 +1901,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     <select
                         value={sortBy}
                         onChange={e => setSortBy(e.target.value)}
-                        className="text-xs bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-gray-300 focus:outline-none focus:border-violet-500/50 cursor-pointer"
+                        className="text-xs bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-stone-300 focus:outline-none focus:border-terracotta-500/50 cursor-pointer"
                     >
                         <option value="pct_desc">% Complete</option>
                         <option value="owned_desc">Albums Owned</option>
@@ -1911,7 +1911,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     <button
                         onClick={() => fetchGaps(true)}
                         disabled={loading}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white transition-all"
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
                         title="Refresh"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -1922,18 +1922,18 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
             {/* Artist search dropdown */}
             {searchOpen && (
                 <div className="mb-3 relative">
-                    <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus-within:border-violet-500/50">
-                        <Search size={12} className="text-gray-500 shrink-0" />
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus-within:border-terracotta-500/50">
+                        <Search size={12} className="text-stone-500 shrink-0" />
                         <input
                             autoFocus
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="Search your artists…"
-                            className="flex-1 bg-transparent text-xs text-white placeholder-gray-600 outline-none"
+                            className="flex-1 bg-transparent text-xs text-white placeholder-stone-600 outline-none"
                         />
                         {searchQuery && (
-                            <button onClick={() => setSearchQuery('')} className="text-gray-600 hover:text-gray-400">
+                            <button onClick={() => setSearchQuery('')} className="text-stone-600 hover:text-stone-400">
                                 <X size={10} />
                             </button>
                         )}
@@ -1944,10 +1944,10 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                             .filter(a => !/^various/i.test(a.name) && a.name.toLowerCase().includes(q))
                             .slice(0, 8);
                         if (!results.length) return (
-                            <div className="mt-1 px-3 py-2 text-xs text-gray-600 bg-gray-900 border border-white/10 rounded-xl">No artists found</div>
+                            <div className="mt-1 px-3 py-2 text-xs text-stone-600 bg-stone-900 border border-white/10 rounded-xl">No artists found</div>
                         );
                         return (
-                            <div className="mt-1 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
+                            <div className="mt-1 bg-stone-900 border border-white/10 rounded-xl overflow-hidden shadow-xl">
                                 {results.map(a => {
                                     const loaded = gaps.some(g => g.artist.id === a.id);
                                     const pinned = pinnedArtistIds.has(a.id);
@@ -1958,10 +1958,10 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                             className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-white/5 transition-colors border-b border-white/5 last:border-0"
                                         >
                                             <span className="text-xs text-white">{a.name}</span>
-                                            <span className="text-[10px] text-gray-600">
+                                            <span className="text-[10px] text-stone-600">
                                                 {loaded || pinned
                                                     ? <CheckCircle size={10} className="text-green-500" />
-                                                    : <span className="text-gray-600">{a.count} album{a.count !== 1 ? 's' : ''}</span>
+                                                    : <span className="text-stone-600">{a.count} album{a.count !== 1 ? 's' : ''}</span>
                                                 }
                                             </span>
                                         </button>
@@ -1980,7 +1980,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                         const artist = collectionArtists.find(a => a.id === id);
                         if (!artist) return null;
                         return (
-                            <span key={id} className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-violet-500/10 border border-violet-500/20 text-violet-300">
+                            <span key={id} className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-terracotta-500/10 border border-terracotta-500/20 text-terracotta-300">
                                 {artist.name}
                                 <button onClick={() => handleUnpinArtist(id)} className="hover:text-white transition-colors ml-0.5">
                                     <X size={9} />
@@ -1992,34 +1992,34 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
             )}
 
             {loading && (
-                <div className="flex items-center gap-3 py-3 px-1 text-gray-500">
-                    <Loader2 size={14} className="animate-spin text-violet-500 shrink-0" />
+                <div className="flex items-center gap-3 py-3 px-1 text-stone-500">
+                    <Loader2 size={14} className="animate-spin text-terracotta-500 shrink-0" />
                     <p className="text-xs">Analyzing artist {progress.done} of {progress.total}…</p>
                 </div>
             )}
             {loadingExtra && (
-                <div className="flex items-center gap-3 py-2 px-1 text-gray-500">
+                <div className="flex items-center gap-3 py-2 px-1 text-stone-500">
                     <Loader2 size={12} className="animate-spin text-green-500 shrink-0" />
                     <p className="text-xs">Loading all artists… {extraProgress.done} of {extraProgress.total}</p>
                 </div>
             )}
 
             {error && (
-                <div className="text-center py-10 text-rose-400 text-sm flex flex-col items-center gap-2">
+                <div className="text-center py-10 text-brass-400 text-sm flex flex-col items-center gap-2">
                     <AlertCircle size={24} />
                     <p>{error}</p>
                 </div>
             )}
 
             {collectionLoading && (
-                <div className="flex flex-col items-center gap-3 py-12 text-gray-500 text-sm">
-                    <Loader2 size={28} className="animate-spin text-violet-500" />
+                <div className="flex flex-col items-center gap-3 py-12 text-stone-500 text-sm">
+                    <Loader2 size={28} className="animate-spin text-terracotta-500" />
                     <p>Waiting for your full collection to load…</p>
                 </div>
             )}
 
             {!collectionLoading && !loading && gaps.length === 0 && !error && (
-                <div className="text-center py-12 text-gray-500 text-sm">
+                <div className="text-center py-12 text-stone-500 text-sm">
                     <CheckCircle size={36} className="mx-auto mb-3 opacity-20" />
                     <p>No gap data yet. Make sure your collection is loaded.</p>
                 </div>
@@ -2045,10 +2045,10 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                     <CompletionRing pct={pct} size={56} />
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-bold text-white truncate">{artist.name}</p>
-                                        <p className="text-xs text-gray-400 mt-0.5">
+                                        <p className="text-xs text-stone-400 mt-0.5">
                                             <span className="text-green-400 font-bold">{ownedCount}</span> owned ·{' '}
-                                            <span className="text-rose-400 font-bold">{missing.length}</span> missing
-                                            {' '}of <span className="text-gray-300 font-bold">{total}</span> vinyl albums
+                                            <span className="text-brass-400 font-bold">{missing.length}</span> missing
+                                            {' '}of <span className="text-stone-300 font-bold">{total}</span> vinyl albums
                                         </p>
                                         {pct === 100 && (
                                             <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-green-400">
@@ -2056,7 +2056,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-gray-500">
+                                    <div className="text-stone-500">
                                         {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                                     </div>
                                 </button>
@@ -2076,18 +2076,18 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                                         onClick={() => setSelectedRelease({ release, artistName: artist.name })}
                                                         className="flex-1 min-w-0 flex items-center gap-3 text-left"
                                                     >
-                                                        <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
+                                                        <div className="w-10 h-10 rounded-lg bg-stone-800 flex-shrink-0 overflow-hidden">
                                                             {release.thumb ? (
                                                                 <img src={release.thumb} alt={release.title} className="w-full h-full object-cover" loading="lazy" />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center">
-                                                                    <Disc3 size={16} className="text-gray-600" />
+                                                                    <Disc3 size={16} className="text-stone-600" />
                                                                 </div>
                                                             )}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-xs font-semibold text-white truncate">{release.title}</p>
-                                                            <p className="text-[10px] text-gray-500">
+                                                            <p className="text-[10px] text-stone-500">
                                                                 {release.year || '—'}{release.label ? ` · ${release.label}` : ''}
                                                             </p>
                                                         </div>
@@ -2099,10 +2099,10 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                                             wState === 'done'
                                                                 ? 'bg-green-500/10 border-green-500/30 text-green-400'
                                                                 : wState === 'error'
-                                                                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                                                                    ? 'bg-brass-500/10 border-brass-500/30 text-brass-400'
                                                                     : wState === 'pending'
-                                                                        ? 'bg-white/5 border-white/10 text-gray-500'
-                                                                        : 'bg-violet-500/10 border-violet-500/30 text-violet-300 hover:bg-violet-500/20'
+                                                                        ? 'bg-white/5 border-white/10 text-stone-500'
+                                                                        : 'bg-terracotta-500/10 border-terracotta-500/30 text-terracotta-300 hover:bg-terracotta-500/20'
                                                         }`}
                                                         title="Add to Discogs Wantlist"
                                                     >
@@ -2132,18 +2132,18 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                                             onClick={() => setSelectedRelease({ release, artistName: artist.name })}
                                                             className="flex-1 min-w-0 flex items-center gap-3 text-left"
                                                         >
-                                                            <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
+                                                            <div className="w-10 h-10 rounded-lg bg-stone-800 flex-shrink-0 overflow-hidden">
                                                                 {release.thumb ? (
                                                                     <img src={release.thumb} alt={release.title} className="w-full h-full object-cover" loading="lazy" />
                                                                 ) : (
                                                                     <div className="w-full h-full flex items-center justify-center">
-                                                                        <Disc3 size={16} className="text-gray-600" />
+                                                                        <Disc3 size={16} className="text-stone-600" />
                                                                     </div>
                                                                 )}
                                                             </div>
                                                             <div className="flex-1 min-w-0">
                                                                 <p className="text-xs font-semibold text-white truncate">{release.title}</p>
-                                                                <p className="text-[10px] text-gray-500">
+                                                                <p className="text-[10px] text-stone-500">
                                                                     {release.year || '—'}{release.label ? ` · ${release.label}` : ''}
                                                                 </p>
                                                             </div>
@@ -2160,7 +2160,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                         {(missing.length > 0 || alternates.length > 0) && (collectionByArtist.get(String(artist.id)) || []).length > 0 && (
                                             <div className="px-4 py-2 flex items-center gap-2 border-b border-white/5 bg-white/[0.01]">
                                                 <CheckCircle size={10} className="text-green-500 shrink-0" />
-                                                <span className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider">In your collection</span>
+                                                <span className="text-[10px] font-semibold text-stone-600 uppercase tracking-wider">In your collection</span>
                                             </div>
                                         )}
 
@@ -2173,18 +2173,18 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                                     onClick={() => setSelectedRelease({ release: info, artistName: artist.name })}
                                                     className="flex-1 min-w-0 flex items-center gap-3 text-left"
                                                 >
-                                                    <div className="w-10 h-10 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden">
+                                                    <div className="w-10 h-10 rounded-lg bg-stone-800 flex-shrink-0 overflow-hidden">
                                                         {info.thumb ? (
                                                             <img src={info.thumb} alt={info.title} className="w-full h-full object-cover" loading="lazy" />
                                                         ) : (
                                                             <div className="w-full h-full flex items-center justify-center">
-                                                                <Disc3 size={16} className="text-gray-600" />
+                                                                <Disc3 size={16} className="text-stone-600" />
                                                             </div>
                                                         )}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-xs font-semibold text-white truncate">{info.title}</p>
-                                                        <p className="text-[10px] text-gray-500">
+                                                        <p className="text-[10px] text-stone-500">
                                                             {info.year || '—'}{info.labels?.[0]?.name ? ` · ${info.labels[0].name}` : ''}
                                                         </p>
                                                     </div>
@@ -2198,7 +2198,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                                         {missing.length === 0 && (collectionByArtist.get(String(artist.id)) || []).length === 0 && (
                                             <div className="px-4 py-4 text-center">
                                                 <CheckCircle size={20} className="mx-auto mb-1 text-green-400 opacity-60" />
-                                                <p className="text-xs text-gray-500">You own all their vinyl releases!</p>
+                                                <p className="text-xs text-stone-500">You own all their vinyl releases!</p>
                                             </div>
                                         )}
                                     </div>
@@ -2257,8 +2257,8 @@ const normalizeOSMShop = (el) => {
 // Leaflet custom marker icons (created lazily to avoid SSR issues)
 const createShopIcon = (highlighted = false) => {
     const size = highlighted ? 36 : 30;
-    const bg = highlighted ? '#8b5cf6' : '#7c3aed';
-    const shadow = highlighted ? '0 0 15px rgba(124,58,237,0.5)' : '0 2px 10px rgba(0,0,0,0.6)';
+    const bg = highlighted ? '#C4622D' : '#A84E22';
+    const shadow = highlighted ? '0 0 15px rgba(196,98,45,0.5)' : '0 2px 10px rgba(0,0,0,0.6)';
     return L.divIcon({
         html: `<div style="width:${size}px;height:${size}px;background:${bg};border:2px solid white;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:${shadow};transition:all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)"><svg width="${size * 0.4}" height="${size * 0.4}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></div>`,
         className: '',
@@ -2269,7 +2269,7 @@ const createShopIcon = (highlighted = false) => {
 };
 
 const createUserLocationIcon = () => L.divIcon({
-    html: `<div style="width:20px;height:20px;background:#7c3aed;border:3px solid white;border-radius:50%;box-shadow:0 0 12px rgba(124,58,237,0.4), inset 0 0 4px rgba(0,0,0,0.2)"></div>`,
+    html: `<div style="width:20px;height:20px;background:#A84E22;border:3px solid white;border-radius:50%;box-shadow:0 0 12px rgba(168,78,34,0.4), inset 0 0 4px rgba(0,0,0,0.2)"></div>`,
     className: '',
     iconSize: [20, 20],
     iconAnchor: [10, 10],
@@ -2305,8 +2305,8 @@ const MapPanController = ({ shop }) => {
 };
 
 const ShopPlaceholder = ({ large }) => (
-    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
-        <Store size={large ? 48 : 28} className="text-gray-600" />
+    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-stone-800 to-stone-900">
+        <Store size={large ? 48 : 28} className="text-stone-600" />
     </div>
 );
 
@@ -2320,43 +2320,43 @@ const ShopDetailModal = ({ shop, onClose, favorites, onToggleFavorite }) => {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md sm:p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-lg bg-gray-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[90dvh]">
+            <div className="w-full max-w-lg bg-stone-900 rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border border-white/10 shadow-2xl relative max-h-[90dvh]">
                 <button onClick={onClose} className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center text-white transition-colors">
                     <span className="text-xl leading-none">&times;</span>
                 </button>
                 <button
                     onClick={() => onToggleFavorite(shop.id)}
-                    className={`absolute top-4 right-14 z-10 w-8 h-8 rounded-full backdrop-blur border flex items-center justify-center transition-all ${isFav ? 'bg-rose-500/30 border-rose-500/50 text-rose-400' : 'bg-black/40 border-white/20 text-gray-300 hover:text-rose-400'}`}
+                    className={`absolute top-4 right-14 z-10 w-8 h-8 rounded-full backdrop-blur border flex items-center justify-center transition-all ${isFav ? 'bg-brass-500/30 border-brass-500/50 text-brass-400' : 'bg-black/40 border-white/20 text-stone-300 hover:text-brass-400'}`}
                     title={isFav ? 'Remove from favorites' : 'Save as favorite'}
                 >
-                    <Heart size={14} className={isFav ? 'fill-rose-400' : ''} />
+                    <Heart size={14} className={isFav ? 'fill-brass-400' : ''} />
                 </button>
 
                 {/* Header */}
-                <div className="h-36 flex-shrink-0 relative overflow-hidden bg-gray-800">
+                <div className="h-36 flex-shrink-0 relative overflow-hidden bg-stone-800">
                     <ShopPlaceholder large />
-                    <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/40 to-transparent" />
                     <div className="absolute bottom-4 left-5 right-14">
                         <h2 className="text-xl font-bold text-white leading-tight">{name}</h2>
                     </div>
                 </div>
 
                 <div className="overflow-y-auto flex-1 min-h-0 p-5 space-y-5 pb-10">
-                    {description && <p className="text-sm text-gray-400 leading-relaxed">{description}</p>}
+                    {description && <p className="text-sm text-stone-400 leading-relaxed">{description}</p>}
 
                     <div className="space-y-3.5">
                         {address && (
                             <div className="flex items-start gap-3">
-                                <MapPin size={16} className="text-violet-400 flex-shrink-0 mt-0.5" />
+                                <MapPin size={16} className="text-terracotta-400 flex-shrink-0 mt-0.5" />
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-gray-300 leading-snug">{address}</p>
+                                    <p className="text-sm text-stone-300 leading-snug">{address}</p>
                                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                                         <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-400 hover:text-violet-300 bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-lg transition-colors">
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-terracotta-400 hover:text-terracotta-300 bg-terracotta-500/10 border border-terracotta-500/20 px-2.5 py-1 rounded-lg transition-colors">
                                             <ExternalLink size={10} /> Google Maps
                                         </a>
                                         <a href={appleMapsUrl} target="_blank" rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-gray-200 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg transition-colors">
+                                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-stone-400 hover:text-stone-200 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg transition-colors">
                                             <ExternalLink size={10} /> Apple Maps
                                         </a>
                                     </div>
@@ -2365,21 +2365,21 @@ const ShopDetailModal = ({ shop, onClose, favorites, onToggleFavorite }) => {
                         )}
                         {phone && (
                             <div className="flex items-center gap-3">
-                                <Phone size={16} className="text-violet-400 flex-shrink-0" />
-                                <a href={`tel:${phone.replace(/\D/g, '')}`} className="text-sm text-gray-300 hover:text-violet-300 transition-colors">{phone}</a>
+                                <Phone size={16} className="text-terracotta-400 flex-shrink-0" />
+                                <a href={`tel:${phone.replace(/\D/g, '')}`} className="text-sm text-stone-300 hover:text-terracotta-300 transition-colors">{phone}</a>
                             </div>
                         )}
                         {email && (
                             <div className="flex items-center gap-3">
-                                <Globe size={16} className="text-violet-400 flex-shrink-0" />
-                                <a href={`mailto:${email}`} className="text-sm text-gray-300 hover:text-violet-300 truncate transition-colors">{email}</a>
+                                <Globe size={16} className="text-terracotta-400 flex-shrink-0" />
+                                <a href={`mailto:${email}`} className="text-sm text-stone-300 hover:text-terracotta-300 truncate transition-colors">{email}</a>
                             </div>
                         )}
                         {website && (
                             <div className="flex items-center gap-3">
-                                <Globe size={16} className="text-violet-400 flex-shrink-0" />
+                                <Globe size={16} className="text-terracotta-400 flex-shrink-0" />
                                 <a href={website} target="_blank" rel="noopener noreferrer"
-                                    className="text-sm text-gray-300 hover:text-violet-300 truncate transition-colors">
+                                    className="text-sm text-stone-300 hover:text-terracotta-300 truncate transition-colors">
                                     {website.replace(/^https?:\/\//, '').replace(/\/$/, '')}
                                 </a>
                             </div>
@@ -2388,25 +2388,25 @@ const ShopDetailModal = ({ shop, onClose, favorites, onToggleFavorite }) => {
 
                     {hours && (
                         <div>
-                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Hours</h3>
-                            <p className="text-xs text-gray-400 leading-relaxed">{hours}</p>
+                            <h3 className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Hours</h3>
+                            <p className="text-xs text-stone-400 leading-relaxed">{hours}</p>
                         </div>
                     )}
 
                     <div className={`grid gap-2 ${website ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         {osmType && osmId && (
                             <a href={osmUrl} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
+                                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
                                 <MapIcon size={13} /> OpenStreetMap
                             </a>
                         )}
                         <a href={discogsUrl} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
+                            className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-stone-300 hover:text-white border border-white/10 text-xs font-semibold transition-colors">
                             <Disc3 size={13} /> Discogs
                         </a>
                         {website && (
                             <a href={website} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 hover:text-violet-200 border border-violet-500/20 text-xs font-semibold transition-colors">
+                                className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-terracotta-500/10 hover:bg-terracotta-500/20 text-terracotta-300 hover:text-terracotta-200 border border-terracotta-500/20 text-xs font-semibold transition-colors">
                                 <Globe size={13} /> Website
                             </a>
                         )}
@@ -2574,28 +2574,28 @@ const ShopLocalSection = () => {
             {/* Header */}
             <div className="mb-5">
                 <h2 className="text-base font-bold text-white">Shop Local</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Find vinyl record stores near you · powered by OpenStreetMap</p>
+                <p className="text-xs text-stone-500 mt-0.5">Find vinyl record stores near you · powered by OpenStreetMap</p>
             </div>
 
             {/* Search card */}
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 mb-5">
                 <form onSubmit={handleZipSubmit} className="flex gap-2 mb-3">
                     <div className="relative flex-1">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
                         <input
                             type="text"
                             value={zip}
                             onChange={e => setZip(e.target.value)}
                             placeholder="Enter zip code…"
-                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-base text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-base text-white placeholder-stone-600 focus:outline-none focus:border-terracotta-500/50 transition-colors"
                         />
                     </div>
                     <button type="submit" disabled={geoLoading || !zip.trim()}
-                        className="px-4 py-2.5 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/30 text-violet-300 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
+                        className="px-4 py-2.5 rounded-xl bg-terracotta-500/20 hover:bg-terracotta-500/30 border border-terracotta-500/30 text-terracotta-300 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5">
                         {geoLoading ? <Loader2 size={14} className="animate-spin" /> : 'Search'}
                     </button>
                     <button type="button" onClick={handleGeolocate} disabled={geoLoading} title="Use my location"
-                        className="px-3 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-gray-400 hover:text-white transition-colors disabled:opacity-40 flex items-center gap-1.5 text-sm font-semibold flex-shrink-0">
+                        className="px-3 py-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-stone-400 hover:text-white transition-colors disabled:opacity-40 flex items-center gap-1.5 text-sm font-semibold flex-shrink-0">
                         {geoLoading ? <Loader2 size={14} className="animate-spin" /> : <Navigation size={14} />}
                         <span className="hidden sm:inline">My Location</span>
                     </button>
@@ -2603,10 +2603,10 @@ const ShopLocalSection = () => {
 
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-gray-500">Within:</span>
+                        <span className="text-xs text-stone-500">Within:</span>
                         {RADIUS_OPTIONS.map(opt => (
                             <button key={opt.value} onClick={() => handleRadiusChange(opt.value)}
-                                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${radius === opt.value ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
+                                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${radius === opt.value ? 'bg-terracotta-500/20 border-terracotta-500/40 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}>
                                 {opt.label}
                             </button>
                         ))}
@@ -2614,12 +2614,12 @@ const ShopLocalSection = () => {
                     {location && (
                         <div className="flex items-center gap-2">
                             <button onClick={handleWebSearch} disabled={webLoading}
-                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-40">
+                                className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border border-white/10 bg-white/5 text-stone-400 hover:text-white hover:bg-white/10 transition-all disabled:opacity-40">
                                 {webLoading ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
                                 Search Web
                             </button>
                             <button onClick={() => setShowMap(v => !v)}
-                                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${showMap ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}>
+                                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${showMap ? 'bg-terracotta-500/20 border-terracotta-500/40 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}>
                                 <MapIcon size={12} /> {showMap ? 'Hide Map' : 'Show Map'}
                             </button>
                         </div>
@@ -2627,9 +2627,9 @@ const ShopLocalSection = () => {
                 </div>
 
                 {location && (
-                    <p className="text-xs text-gray-500 mt-2.5 flex items-center gap-1">
-                        <MapPin size={10} className="text-violet-500" />
-                        Showing results near <span className="text-gray-300 ml-0.5">{location.name}</span>
+                    <p className="text-xs text-stone-500 mt-2.5 flex items-center gap-1">
+                        <MapPin size={10} className="text-terracotta-500" />
+                        Showing results near <span className="text-stone-300 ml-0.5">{location.name}</span>
                     </p>
                 )}
             </div>
@@ -2645,7 +2645,7 @@ const ShopLocalSection = () => {
                         <Circle
                             center={[location.lat, location.lng]}
                             radius={radius * 1609.34}
-                            pathOptions={{ color: '#7c3aed', fillColor: '#7c3aed', fillOpacity: 0.1, weight: 2, dashArray: '8 6' }}
+                            pathOptions={{ color: '#A84E22', fillColor: '#A84E22', fillOpacity: 0.1, weight: 2, dashArray: '8 6' }}
                         />
                         <Marker position={[location.lat, location.lng]} icon={createUserLocationIcon()}>
                             <Popup><span style={{ fontSize: 12 }}>Your location</span></Popup>
@@ -2673,14 +2673,14 @@ const ShopLocalSection = () => {
 
             {/* Error */}
             {error && (
-                <div className="text-center py-10 px-6 rounded-2xl bg-rose-500/5 border border-rose-500/10 text-rose-400 text-sm flex flex-col items-center gap-4 mb-6 animate-in fade-in slide-in-from-bottom-2">
-                    <AlertCircle size={32} className="text-rose-500/50" />
+                <div className="text-center py-10 px-6 rounded-2xl bg-brass-500/5 border border-brass-500/10 text-brass-400 text-sm flex flex-col items-center gap-4 mb-6 animate-in fade-in slide-in-from-bottom-2">
+                    <AlertCircle size={32} className="text-brass-500/50" />
                     <p className="max-w-xs leading-relaxed">{error}</p>
                     {error.includes('Search Web') && (
                         <button 
                             onClick={handleWebSearch}
                             disabled={webLoading}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold shadow-lg shadow-violet-900/20 transition-all active:scale-95 disabled:opacity-50"
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-terracotta-600 hover:bg-terracotta-500 text-white font-bold shadow-lg shadow-terracotta-900/20 transition-all active:scale-95 disabled:opacity-50"
                         >
                             {webLoading ? <Loader2 size={16} className="animate-spin" /> : <Globe size={16} />}
                             Try Web Search Now
@@ -2706,23 +2706,23 @@ const ShopLocalSection = () => {
 
             {/* Prompt */}
             {!loading && !error && !location && (
-                <div className="text-center py-16 text-gray-600">
+                <div className="text-center py-16 text-stone-600">
                     <MapPin size={44} className="mx-auto mb-4 opacity-20" />
                     <p className="text-sm">Enter your zip code or tap My Location</p>
-                    <p className="text-xs mt-1 text-gray-700">to find vinyl record stores near you.</p>
+                    <p className="text-xs mt-1 text-stone-700">to find vinyl record stores near you.</p>
                 </div>
             )}
 
             {/* Zero results */}
             {!loading && !error && location && shops.length === 0 && (
-                <div className="text-center py-16 text-gray-600">
+                <div className="text-center py-16 text-stone-600">
                     <Store size={44} className="mx-auto mb-4 opacity-20" />
                     <p className="text-sm">No record stores found in this area.</p>
-                    <p className="text-xs mt-1 text-gray-700 mb-6">Try increasing the search radius or search the wider web.</p>
+                    <p className="text-xs mt-1 text-stone-700 mb-6">Try increasing the search radius or search the wider web.</p>
                     <button
                         onClick={handleWebSearch}
                         disabled={webLoading}
-                        className="mx-auto flex items-center gap-2 px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold shadow-lg shadow-violet-500/20 transition-all disabled:opacity-50"
+                        className="mx-auto flex items-center gap-2 px-6 py-3 rounded-xl bg-terracotta-600 hover:bg-terracotta-500 text-white text-sm font-bold shadow-lg shadow-terracotta-500/20 transition-all disabled:opacity-50"
                     >
                         {webLoading ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />}
                         Search the Web for Stores
@@ -2739,32 +2739,32 @@ const ShopLocalSection = () => {
                             <div
                                 key={shop.id}
                                 onClick={() => setSelectedShop(shop)}
-                                className="group flex items-start gap-4 p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-violet-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
+                                className="group flex items-start gap-4 p-4 rounded-2xl bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 hover:border-terracotta-500/20 transition-all cursor-pointer active:bg-white/[0.08] active:scale-[0.99]"
                             >
-                                <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden border border-white/10 bg-gray-800">
+                                <div className="w-14 h-14 rounded-xl flex-shrink-0 overflow-hidden border border-white/10 bg-stone-800">
                                     <ShopPlaceholder />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex flex-col gap-0.5">
-                                            <p className="text-sm font-bold text-white group-hover:text-violet-300 transition-colors leading-tight">{shop.name}</p>
+                                            <p className="text-sm font-bold text-white group-hover:text-terracotta-300 transition-colors leading-tight">{shop.name}</p>
                                             {shop.source === 'web' && (
-                                                <span className="text-[9px] font-black uppercase tracking-wider text-violet-400 flex items-center gap-1">
+                                                <span className="text-[9px] font-black uppercase tracking-wider text-terracotta-400 flex items-center gap-1">
                                                     <Globe size={10} /> Found via Web
                                                 </span>
                                             )}
                                         </div>
                                         <button
                                             onClick={e => { e.stopPropagation(); toggleFavorite(shop.id); }}
-                                            className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border transition-all ${isFav ? 'bg-rose-500/20 border-rose-500/40 text-rose-400' : 'bg-white/5 border-white/10 text-gray-600 hover:text-rose-400 hover:border-rose-400/30 opacity-0 group-hover:opacity-100'}`}
+                                            className={`flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-full border transition-all ${isFav ? 'bg-brass-500/20 border-brass-500/40 text-brass-400' : 'bg-white/5 border-white/10 text-stone-600 hover:text-brass-400 hover:border-brass-400/30 opacity-0 group-hover:opacity-100'}`}
                                             title={isFav ? 'Remove from favorites' : 'Save as favorite'}
                                         >
-                                            <Heart size={12} className={isFav ? 'fill-rose-400' : ''} />
+                                            <Heart size={12} className={isFav ? 'fill-brass-400' : ''} />
                                         </button>
                                     </div>
-                                    {shop.address && <p className="text-xs text-gray-500 truncate mt-0.5">{shop.address}</p>}
-                                    {shop.phone && <p className="text-xs text-gray-600 mt-0.5">{shop.phone}</p>}
-                                    {shop.hours && <p className="text-[10px] text-gray-600 truncate mt-0.5">{shop.hours}</p>}
+                                    {shop.address && <p className="text-xs text-stone-500 truncate mt-0.5">{shop.address}</p>}
+                                    {shop.phone && <p className="text-xs text-stone-600 mt-0.5">{shop.phone}</p>}
+                                    {shop.hours && <p className="text-[10px] text-stone-600 truncate mt-0.5">{shop.hours}</p>}
                                 </div>
                             </div>
                         );
@@ -2863,30 +2863,30 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
     }, [releases]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-32">
+        <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-black text-white pb-32">
             {/* Header */}
             <div className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,0.12),transparent_60%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(196,98,45,0.12),transparent_60%)]" />
                 <div className="relative max-w-3xl mx-auto px-4 pt-10 pt-safe-header pb-5 text-center">
                     {!isAuthenticated && (
                         <div className="flex justify-end mb-3">
                             <a
                                 href="/api/discogs?action=login"
-                                className="text-xs font-bold text-violet-300 border border-violet-500/30 rounded-full px-3 py-1.5 hover:bg-violet-500/10 transition-colors"
+                                className="text-xs font-bold text-terracotta-300 border border-terracotta-500/30 rounded-full px-3 py-1.5 hover:bg-terracotta-500/10 transition-colors"
                             >
                                 Sign in
                             </a>
                         </div>
                     )}
                     <div className="flex items-center justify-center gap-3 mb-2">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center shadow-xl">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-terracotta-500 to-brass-500 flex items-center justify-center shadow-xl">
                             <Compass size={24} className="text-white" />
                         </div>
-                        <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+                        <h1 className="text-3xl sm:text-4xl font-serif font-black tracking-tight text-parchment">
                             Explore Vinyl
                         </h1>
                     </div>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-stone-500 text-sm">
                         {isAuthenticated
                             ? 'Personalized experience, curated from your collection'
                             : 'News, new releases, and local shops — no account needed'}
@@ -2895,7 +2895,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
             </div>
 
             {/* Sub-tab pills */}
-            <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 bg-gray-950/80 backdrop-blur-xl border-b border-white/5">
+            <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 bg-stone-950/80 backdrop-blur-xl border-b border-white/5">
                 <div className="max-w-3xl mx-auto px-4 flex gap-1 py-2 overflow-x-auto no-scrollbar">
                     {TABS.map(tab => {
                         const isLocked = tab.requiresAuth && !isAuthenticated;
@@ -2905,10 +2905,10 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
                             onClick={() => isLocked ? onRequireLogin?.() : switchTab(tab.id)}
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${
                                 activeTab === tab.id
-                                    ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+                                    ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30'
                                     : isLocked
-                                        ? 'text-gray-600 border border-transparent'
-                                        : 'text-gray-500 hover:text-gray-300 border border-transparent hover:border-white/10'
+                                        ? 'text-stone-600 border border-transparent'
+                                        : 'text-stone-500 hover:text-stone-300 border border-transparent hover:border-white/10'
                             }`}
                         >
                             <tab.icon size={12} />

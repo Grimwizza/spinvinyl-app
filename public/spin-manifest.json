@@ -5,9 +5,15 @@
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#030712",
-    "theme_color": "#7c3aed",
+    "background_color": "#0c0a09",
+    "theme_color": "#C4622D",
     "icons": [
+        {
+            "src": "/spin-icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
         {
             "src": "/spin-icon.png",
             "sizes": "512x512",

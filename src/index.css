@@ -221,7 +221,7 @@ body {
   gap: 0;
   padding: 6px 2px;
   border-radius: 999px;
-  background: rgba(3, 7, 18, 0.7);
+  background: rgba(12, 10, 9, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -268,13 +268,13 @@ body {
 }
 
 .alpha-letter--active {
-  color: rgb(167, 139, 250); /* violet-400 */
-  background: rgba(139, 92, 246, 0.15);
+  color: rgb(217, 119, 72); /* terracotta-400 */
+  background: rgba(196, 98, 45, 0.15);
 }
 
 .alpha-letter--drag {
   color: white;
-  background: rgba(139, 92, 246, 0.3);
+  background: rgba(196, 98, 45, 0.3);
   transform: scale(1.2);
 }
 
@@ -288,14 +288,14 @@ body {
   width: 48px;
   height: 48px;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgb(139, 92, 246), rgb(168, 85, 247));
+  background: linear-gradient(135deg, rgb(217, 119, 72), rgb(201, 162, 75));
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
   font-weight: 900;
-  color: white;
-  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.4);
+  color: #0c0a09;
+  box-shadow: 0 8px 32px rgba(196, 98, 45, 0.4);
   animation: alpha-bubble-in 0.15s ease-out;
   pointer-events: none;
 }
@@ -333,14 +333,14 @@ body {
   margin-left: -3.5px;
   margin-top: -10px;
   border-radius: 999px;
-  background: rgba(139, 92, 246, 0.5);
+  background: rgba(196, 98, 45, 0.5);
   transition: top 0.1s ease-out;
 }
 
 /* ── Section Dividers ───────────────────────────── */
 .section-divider {
   top: 56px; /* toolbar height */
-  background: rgba(3, 7, 18, 0.85);
+  background: rgba(12, 10, 9, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -466,5 +466,11 @@ body.modal-open {
   [class*="text-\\[11px\\]"] {
     font-size: 0.8rem !important;
     line-height: 1.3rem !important;
+  }
+
+  /* Force all form controls to 16px minimum — under that, iOS Safari auto-zooms
+     the viewport on focus, which is jarring and doesn't un-zoom on blur. */
+  input, select, textarea {
+    font-size: 16px !important;
   }
 }

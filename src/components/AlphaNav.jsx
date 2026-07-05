@@ -32,11 +32,11 @@ export const SectionDivider = ({ letter, count }) => (
         id={`section-${letter}`}
         className="section-divider sticky z-20 flex items-center gap-3 px-1 py-2 sm:py-2.5 -mx-1"
     >
-        <span className="text-lg font-black text-violet-400 tracking-tight w-8 text-center flex-shrink-0">
+        <span className="text-lg font-black text-terracotta-400 tracking-tight w-8 text-center flex-shrink-0">
             {letter}
         </span>
-        <div className="flex-1 h-px bg-gradient-to-r from-violet-500/30 via-white/5 to-transparent" />
-        <span className="text-[10px] text-gray-500 font-medium tabular-nums pr-1">
+        <div className="flex-1 h-px bg-gradient-to-r from-terracotta-500/30 via-white/5 to-transparent" />
+        <span className="text-[10px] text-stone-500 font-medium tabular-nums pr-1">
             {count}
         </span>
     </div>

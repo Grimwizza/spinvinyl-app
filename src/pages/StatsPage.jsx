@@ -36,7 +36,7 @@ const StatCard = ({ label, value, icon: Icon, accent }) => (
     <div className={`rounded-2xl border bg-white/[0.03] p-4 flex flex-col gap-2 border-white/10`}>
         <div className="flex items-center gap-2">
             <Icon size={16} className={accent} />
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">{label}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">{label}</span>
         </div>
         <p className="text-2xl sm:text-3xl font-black text-white leading-none">{value}</p>
     </div>
@@ -71,10 +71,10 @@ const ListeningCalendar = ({ dayMap }) => {
     const getCellColor = (day) => {
         if (!dayMap[day]) return 'bg-white/5';
         const ratio = dayMap[day] / maxSeconds;
-        if (ratio < 0.2) return 'bg-violet-900/50';
-        if (ratio < 0.4) return 'bg-violet-700/70';
-        if (ratio < 0.7) return 'bg-violet-500/80';
-        return 'bg-violet-400';
+        if (ratio < 0.2) return 'bg-terracotta-900/50';
+        if (ratio < 0.4) return 'bg-terracotta-700/70';
+        if (ratio < 0.7) return 'bg-terracotta-500/80';
+        return 'bg-terracotta-400';
     };
 
     const activeDays = Object.keys(dayMap).length;
@@ -84,15 +84,15 @@ const ListeningCalendar = ({ dayMap }) => {
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h3 className="text-sm font-bold text-white">Listening Calendar</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{activeDays} day{activeDays !== 1 ? 's' : ''} with listening activity</p>
+                    <p className="text-xs text-stone-500 mt-0.5">{activeDays} day{activeDays !== 1 ? 's' : ''} with listening activity</p>
                 </div>
                 {/* Legend */}
                 <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-600">Less</span>
-                    {['bg-white/5', 'bg-violet-900/50', 'bg-violet-700/70', 'bg-violet-500/80', 'bg-violet-400'].map((c, i) => (
+                    <span className="text-[10px] text-stone-600">Less</span>
+                    {['bg-white/5', 'bg-terracotta-900/50', 'bg-terracotta-700/70', 'bg-terracotta-500/80', 'bg-terracotta-400'].map((c, i) => (
                         <div key={i} className={`w-3 h-3 rounded-sm ${c}`} />
                     ))}
-                    <span className="text-[10px] text-gray-600">More</span>
+                    <span className="text-[10px] text-stone-600">More</span>
                 </div>
             </div>
 
@@ -105,7 +105,7 @@ const ListeningCalendar = ({ dayMap }) => {
                             const ml = monthLabels.find(m => m.week === wi);
                             return (
                                 <div key={wi} style={{ width: 14, flexShrink: 0 }}>
-                                    {ml && <span className="text-[9px] text-gray-500 leading-none">{ml.label}</span>}
+                                    {ml && <span className="text-[9px] text-stone-500 leading-none">{ml.label}</span>}
                                 </div>
                             );
                         })}
@@ -122,7 +122,7 @@ const ListeningCalendar = ({ dayMap }) => {
                                         <div
                                             key={di}
                                             title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}
-                                            className={`rounded-sm transition-all ${getCellColor(day)} ${isToday ? 'ring-1 ring-violet-400' : ''}`}
+                                            className={`rounded-sm transition-all ${getCellColor(day)} ${isToday ? 'ring-1 ring-terracotta-400' : ''}`}
                                             style={{ width: 14, height: 14, flexShrink: 0 }}
                                         />
                                     );
@@ -148,19 +148,19 @@ const TopAlbums = ({ albums }) => {
             <div className="space-y-3">
                 {albums.map((a, i) => (
                     <div key={a.albumId} className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-gray-600 w-4 text-right">{i + 1}</span>
+                        <span className="text-xs font-bold text-stone-600 w-4 text-right">{i + 1}</span>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate leading-tight">{a.albumTitle}</p>
-                            <p className="text-xs text-gray-500 truncate">{a.artist}</p>
+                            <p className="text-xs text-stone-500 truncate">{a.artist}</p>
                             {/* Bar */}
                             <div className="mt-1 h-1.5 rounded-full bg-white/5 overflow-hidden">
                                 <div
-                                    className="h-full bg-gradient-to-r from-violet-500 to-pink-500 rounded-full"
+                                    className="h-full bg-gradient-to-r from-terracotta-500 to-brass-500 rounded-full"
                                     style={{ width: `${(a.count / maxCount) * 100}%`, transition: 'width 0.7s ease' }}
                                 />
                             </div>
                         </div>
-                        <span className="text-xs font-bold text-violet-400 flex-shrink-0">{a.count}×</span>
+                        <span className="text-xs font-bold text-terracotta-400 flex-shrink-0">{a.count}×</span>
                     </div>
                 ))}
             </div>
@@ -181,14 +181,14 @@ const GenreBreakdown = ({ genres }) => {
             <div className="space-y-2.5">
                 {topGenres.map(({ genre, count }) => (
                     <div key={genre} className="flex items-center gap-3">
-                        <p className="text-xs text-gray-400 w-24 flex-shrink-0 truncate">{genre}</p>
+                        <p className="text-xs text-stone-400 w-24 flex-shrink-0 truncate">{genre}</p>
                         <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
                             <div
-                                className="h-full rounded-full bg-gradient-to-r from-pink-500 to-violet-500"
+                                className="h-full rounded-full bg-gradient-to-r from-brass-500 to-terracotta-500"
                                 style={{ width: `${(count / maxCount) * 100}%`, transition: 'width 0.7s ease' }}
                             />
                         </div>
-                        <span className="text-xs font-bold text-gray-500 w-6 text-right">{count}</span>
+                        <span className="text-xs font-bold text-stone-500 w-6 text-right">{count}</span>
                     </div>
                 ))}
             </div>
@@ -205,17 +205,17 @@ const CollectionProgress = ({ spunCount, totalCount }) => {
             <div className="flex justify-between items-end mb-3">
                 <div>
                     <h3 className="text-sm font-bold text-white">Collection Progress</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Records you've actually listened to</p>
+                    <p className="text-xs text-stone-500 mt-0.5">Records you've actually listened to</p>
                 </div>
-                <p className="text-2xl font-black text-violet-400">{pct}%</p>
+                <p className="text-2xl font-black text-terracotta-400">{pct}%</p>
             </div>
             <div className="h-3 rounded-full bg-white/5 overflow-hidden mb-2">
                 <div
-                    className="h-full bg-gradient-to-r from-violet-500 to-pink-500 rounded-full transition-all duration-700"
+                    className="h-full bg-gradient-to-r from-terracotta-500 to-brass-500 rounded-full transition-all duration-700"
                     style={{ width: `${pct}%` }}
                 />
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-stone-500">
                 <span className="text-white font-bold">{spunCount}</span> of{' '}
                 <span className="text-white font-bold">{totalCount}</span> records spun
             </p>
@@ -253,7 +253,7 @@ const CompletedCollections = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-white truncate">{artist.name}</p>
-                            <p className="text-xs text-gray-500">{artist.count} record{artist.count !== 1 ? 's' : ''} owned</p>
+                            <p className="text-xs text-stone-500">{artist.count} record{artist.count !== 1 ? 's' : ''} owned</p>
                         </div>
                         <span className="text-xs font-bold text-green-400">100%</span>
                     </div>
@@ -280,20 +280,20 @@ const StatsPage = ({ collectionCount }) => {
     const hasAnyData = stats.totalSessions > 0;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-white pb-32">
+        <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-black text-white pb-32">
             {/* Header */}
             <div className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.12),transparent_60%)]" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(201,162,75,0.12),transparent_60%)]" />
                 <div className="relative max-w-3xl mx-auto px-4 pt-10 pt-safe-header pb-6 text-center">
                     <div className="flex items-center justify-center gap-3 mb-2">
-                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-500 to-violet-500 flex items-center justify-center shadow-xl">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brass-500 to-terracotta-500 flex items-center justify-center shadow-xl">
                             <BarChart2 size={24} className="text-white" />
                         </div>
-                        <h1 className="text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
+                        <h1 className="text-3xl sm:text-4xl font-serif font-black tracking-tight text-parchment">
                             Your Stats
                         </h1>
                     </div>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-stone-500 text-sm">
                         {hasAnyData
                             ? `${stats.totalSessions} total session${stats.totalSessions !== 1 ? 's' : ''} · ${formatDuration(stats.totalPlaySeconds)} of music`
                             : 'Start spinning records to see your stats!'}
@@ -309,8 +309,8 @@ const StatsPage = ({ collectionCount }) => {
             <div className="max-w-3xl mx-auto px-4 space-y-5">
                 {/* Time Cards — 2×2 grid */}
                 <div className="grid grid-cols-2 gap-3">
-                    <StatCard label="Today" value={formatDuration(todaySec)} icon={Clock} accent="text-violet-400" />
-                    <StatCard label="This Week" value={formatDuration(weekSec)} icon={TrendingUp} accent="text-pink-400" />
+                    <StatCard label="Today" value={formatDuration(todaySec)} icon={Clock} accent="text-terracotta-400" />
+                    <StatCard label="This Week" value={formatDuration(weekSec)} icon={TrendingUp} accent="text-brass-400" />
                     <StatCard label="This Month" value={formatDuration(monthSec)} icon={Music2} accent="text-blue-400" />
                     <StatCard label="All Time" value={formatDuration(allSec)} icon={Disc3} accent="text-amber-400" />
                 </div>
@@ -332,7 +332,7 @@ const StatsPage = ({ collectionCount }) => {
 
                 {/* Empty state */}
                 {!hasAnyData && (
-                    <div className="text-center py-16 text-gray-600">
+                    <div className="text-center py-16 text-stone-600">
                         <Disc3 size={48} className="mx-auto mb-4 opacity-20" />
                         <p className="text-sm">Spin some records to start building your stats!</p>
                     </div>

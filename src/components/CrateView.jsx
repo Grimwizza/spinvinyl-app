@@ -53,23 +53,23 @@ const CrateCard = ({ release, isCenter }) => {
         <div
             className={`rounded-xl overflow-hidden shadow-2xl border transition-colors ${
                 isCenter
-                    ? 'border-violet-500/60 shadow-violet-500/20'
+                    ? 'border-terracotta-500/60 shadow-terracotta-500/20'
                     : 'border-white/10'
             }`}
             style={{ width: CARD_W, userSelect: 'none' }}
         >
             {/* Album art */}
-            <div style={{ width: CARD_W, height: CARD_H }} className="relative flex-shrink-0 bg-gray-900">
+            <div style={{ width: CARD_W, height: CARD_H }} className="relative flex-shrink-0 bg-stone-900">
                 {src ? (
                     <img src={src} alt={title} className="w-full h-full object-cover" loading="lazy" draggable={false} />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                        <Music2 size={36} className="text-gray-600" />
+                    <div className="w-full h-full flex items-center justify-center bg-stone-800">
+                        <Music2 size={36} className="text-stone-600" />
                     </div>
                 )}
                 {isCenter && (
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end justify-center pb-2">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-violet-300 opacity-80">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-terracotta-300 opacity-80">
                             Tap to View
                         </span>
                     </div>
@@ -77,9 +77,9 @@ const CrateCard = ({ release, isCenter }) => {
             </div>
 
             {/* Footer */}
-            <div className="bg-gray-900 px-3 py-2" style={{ height: 72 }}>
+            <div className="bg-stone-900 px-3 py-2" style={{ height: 72 }}>
                 <p className="text-white text-xs font-semibold leading-tight line-clamp-2">{title}</p>
-                <p className="text-gray-400 text-[10px] mt-0.5 truncate">{artist}</p>
+                <p className="text-stone-400 text-[10px] mt-0.5 truncate">{artist}</p>
             </div>
         </div>
     );
@@ -216,17 +216,17 @@ export default function CrateView({ releases, onAlbumClick, jumpToIndex }) {
             <div className="flex items-center justify-center gap-4 mt-4">
                 <button
                     onClick={() => advance(-1)}
-                    className="p-2.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors active:opacity-70"
+                    className="p-2.5 rounded-full bg-white/5 border border-white/10 text-stone-400 hover:text-white hover:bg-white/10 transition-colors active:opacity-70"
                     aria-label="Previous"
                 >
                     <ChevronLeft size={18} />
                 </button>
-                <span className="text-sm text-gray-500 tabular-nums min-w-[80px] text-center">
+                <span className="text-sm text-stone-500 tabular-nums min-w-[80px] text-center">
                     {centerIndex + 1} / {total}
                 </span>
                 <button
                     onClick={() => advance(1)}
-                    className="p-2.5 rounded-full bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-colors active:opacity-70"
+                    className="p-2.5 rounded-full bg-white/5 border border-white/10 text-stone-400 hover:text-white hover:bg-white/10 transition-colors active:opacity-70"
                     aria-label="Next"
                 >
                     <ChevronRight size={18} />

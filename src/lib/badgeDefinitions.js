@@ -317,8 +317,8 @@ export const BADGES = [
 ];
 
 export const RARITY_COLORS = {
-    common: { bg: 'bg-gray-700/50', border: 'border-gray-600', text: 'text-gray-300', glow: '' },
-    uncommon: { bg: 'bg-violet-900/30', border: 'border-violet-600/50', text: 'text-violet-300', glow: 'shadow-violet-500/20' },
+    common: { bg: 'bg-stone-700/50', border: 'border-stone-600', text: 'text-stone-300', glow: '' },
+    uncommon: { bg: 'bg-terracotta-900/30', border: 'border-terracotta-600/50', text: 'text-terracotta-300', glow: 'shadow-terracotta-500/20' },
     rare: { bg: 'bg-blue-900/30', border: 'border-blue-500/50', text: 'text-blue-300', glow: 'shadow-blue-500/20' },
     legendary: { bg: 'bg-amber-900/30', border: 'border-amber-500/50', text: 'text-amber-300', glow: 'shadow-amber-500/30' },
 };

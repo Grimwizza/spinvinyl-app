@@ -1,16 +1,11 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#8b5cf6" />
-      <stop offset="100%" stop-color="#ec4899" />
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" fill="transparent"/>
-  <circle cx="256" cy="256" r="224" fill="url(#grad)" />
-  <g transform="translate(114.88, 114.88) scale(11.76)" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <circle cx="12" cy="12" r="10"/>
-    <path d="M6 12c0-1.7.7-3.2 1.8-4.2"/>
-    <circle cx="12" cy="12" r="2"/>
-    <path d="M18 12c0 1.7-.7 3.2-1.8 4.2"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#0c0a09"/>
+  <g fill="none" stroke-linecap="round">
+    <circle cx="256" cy="256" r="220" stroke-width="34" stroke="#A84E22"
+            stroke-dasharray="1036.7 345.6" transform="rotate(150 256 256)"/>
+    <circle cx="256" cy="256" r="160" stroke-width="34" stroke="#D97748"
+            stroke-dasharray="754.0 251.33" transform="rotate(30 256 256)"/>
+    <circle cx="256" cy="256" r="100" stroke-width="34" stroke="#C9A24B"
+            stroke-dasharray="471.24 157.08" transform="rotate(-90 256 256)"/>
   </g>
 </svg>

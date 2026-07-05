@@ -306,8 +306,8 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     50% { opacity: 0.25; }
                 }
                 @keyframes corner-glow {
-                    0%, 100% { border-color: rgba(167, 139, 250, 0.6); }
-                    50% { border-color: rgba(192, 132, 252, 1); filter: drop-shadow(0 0 4px rgba(192, 132, 252, 0.6)); }
+                    0%, 100% { border-color: rgba(217, 119, 72, 0.6); }
+                    50% { border-color: rgba(217, 180, 99, 1); filter: drop-shadow(0 0 4px rgba(217, 180, 99, 0.6)); }
                 }
                 .animate-scanner-sweep {
                     animation: scanner-sweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -331,13 +331,13 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     <div className="flex items-center gap-1.5 mt-1.5">
                         <button
                             onClick={handleShowScan}
-                            className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${mode === 'scan' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'text-gray-500 border border-transparent'}`}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${mode === 'scan' ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30' : 'text-stone-500 border border-transparent'}`}
                         >
                             Scan
                         </button>
                         <button
                             onClick={handleShowSearch}
-                            className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${mode === 'search' ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'text-gray-500 border border-transparent'}`}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${mode === 'search' ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30' : 'text-stone-500 border border-transparent'}`}
                         >
                             Search
                         </button>
@@ -346,7 +346,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                 <button
                     onClick={onClose}
                     aria-label="Close scanner"
-                    className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 transition-all flex-shrink-0"
+                    className="w-10 h-10 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta-500 transition-all flex-shrink-0"
                 >
                     <X size={20} className="text-white" />
                 </button>
@@ -381,11 +381,11 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         {/* Scan box */}
                         <div className="relative w-72 h-44 z-10"
                              style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.45)' }}>
-                            <div className="absolute inset-0 rounded-2xl border-2 border-violet-500/20" />
+                            <div className="absolute inset-0 rounded-2xl border-2 border-terracotta-500/20" />
                             {/* Pulsing scanner overlay */}
-                            <div className="absolute inset-0 rounded-2xl bg-violet-400/10 animate-scanner-pulse" />
+                            <div className="absolute inset-0 rounded-2xl bg-terracotta-400/10 animate-scanner-pulse" />
                             {/* Sweeping laser line */}
-                            <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-violet-400 to-transparent shadow-[0_0_8px_2px_rgba(167,139,250,0.6)] animate-scanner-sweep" />
+                            <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-terracotta-400 to-transparent shadow-[0_0_8px_2px_rgba(217,119,72,0.6)] animate-scanner-sweep" />
                             {/* Corner marks */}
                             <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 rounded-tl-2xl animate-corner-glow" />
                             <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 rounded-tr-2xl animate-corner-glow" />
@@ -401,14 +401,14 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
                 {phase === 'init' && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <Loader2 size={32} className="text-violet-400 animate-spin" />
+                        <Loader2 size={32} className="text-terracotta-400 animate-spin" />
                     </div>
                 )}
 
                 {/* Camera failed — show placeholder */}
                 {phase === 'unsupported' && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-950">
-                        <Camera size={48} className="text-gray-700" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-stone-950">
+                        <Camera size={48} className="text-stone-700" />
                     </div>
                 )}
             </div>
@@ -417,19 +417,19 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             {isSearchInput && (
                 <div className="flex-1 flex flex-col items-center justify-center px-6 bg-black">
                     <form onSubmit={handleSearchSubmit} className="w-full max-w-sm flex flex-col gap-3">
-                        <p className="text-gray-400 text-sm text-center mb-2">Search by artist or album title — useful for records with no barcode</p>
+                        <p className="text-stone-400 text-sm text-center mb-2">Search by artist or album title — useful for records with no barcode</p>
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             placeholder="e.g. Fleetwood Mac Rumours"
                             autoFocus
-                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder-stone-600 focus:outline-none focus:border-terracotta-500/50 transition-colors"
                         />
                         <button
                             type="submit"
                             disabled={!searchQuery.trim()}
-                            className="px-4 py-3 rounded-xl bg-violet-500/20 border border-violet-500/30 text-violet-300 text-sm font-bold min-h-[44px] disabled:opacity-40 active:opacity-70"
+                            className="px-4 py-3 rounded-xl bg-terracotta-500/20 border border-terracotta-500/30 text-terracotta-300 text-sm font-bold min-h-[44px] disabled:opacity-40 active:opacity-70"
                         >
                             Search
                         </button>
@@ -438,15 +438,15 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             )}
 
             {/* ── Bottom panel ── */}
-            <div className="bg-gray-950 border-t border-white/10 flex flex-col flex-shrink-0"
+            <div className="bg-stone-950 border-t border-white/10 flex flex-col flex-shrink-0"
                  style={{ maxHeight: (isPreResults || isEditDetails) ? '0' : '60vh', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
 
                 {/* Panel header */}
                 {!isPreResults && (
                     <div className="flex items-start justify-between px-4 py-3 border-b border-white/5 flex-shrink-0">
                         <div className="flex-1 min-w-0 pr-3">
-                            {(barcode || lastQuery) && <p className="text-[10px] text-gray-600 font-mono tracking-wider truncate">{barcode || lastQuery}</p>}
-                            <p className="text-sm font-medium text-gray-300">
+                            {(barcode || lastQuery) && <p className="text-[10px] text-stone-600 font-mono tracking-wider truncate">{barcode || lastQuery}</p>}
+                            <p className="text-sm font-medium text-stone-300">
                                 {phase === 'searching' && 'Searching Discogs…'}
                                 {phase === 'results' && `${results.length} release${results.length !== 1 ? 's' : ''} found`}
                                 {phase === 'empty' && 'No Discogs match found'}
@@ -456,7 +456,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         </div>
                         <button
                             onClick={mode === 'search' ? handleShowSearch : handleRescan}
-                            className="text-xs text-violet-400 font-bold px-3 py-2 min-h-[44px] min-w-[70px] rounded-xl bg-violet-500/10 border border-violet-500/20 active:opacity-70 flex-shrink-0"
+                            className="text-xs text-terracotta-400 font-bold px-3 py-2 min-h-[44px] min-w-[70px] rounded-xl bg-terracotta-500/10 border border-terracotta-500/20 active:opacity-70 flex-shrink-0"
                         >
                             {mode === 'search' ? 'Search Again' : 'Rescan'}
                         </button>
@@ -466,11 +466,11 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
             {/* ── Full-height results / states ── */}
             {!isPreResults && (
-                <div className="bg-gray-950 flex flex-col flex-1 overflow-hidden">
+                <div className="bg-stone-950 flex flex-col flex-1 overflow-hidden">
 
                     {phase === 'searching' && (
                         <div className="flex items-center justify-center py-12">
-                            <Loader2 size={28} className="text-violet-400 animate-spin" />
+                            <Loader2 size={28} className="text-terracotta-400 animate-spin" />
                         </div>
                     )}
 
@@ -486,12 +486,12 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                             <img src={thumb} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-white/5" />
                                         ) : (
                                             <div className="w-12 h-12 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0">
-                                                <Disc size={18} className="text-gray-600" />
+                                                <Disc size={18} className="text-stone-600" />
                                             </div>
                                         )}
                                         <div className="flex-1 min-w-0">
                                             <p className="text-white text-sm font-semibold leading-snug line-clamp-2">{r.title}</p>
-                                            <p className="text-gray-500 text-xs mt-0.5">
+                                            <p className="text-stone-500 text-xs mt-0.5">
                                                 {[r.year, r.country, (r.format || []).slice(0, 2).join('/')].filter(Boolean).join(' · ')}
                                             </p>
                                         </div>
@@ -501,7 +501,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                             className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold min-w-[76px] min-h-[44px] justify-center flex-shrink-0 transition-all ${
                                                 isAdded
                                                     ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                                    : 'bg-violet-500/20 text-violet-300 border border-violet-500/30 active:scale-95 active:opacity-80'
+                                                    : 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30 active:scale-95 active:opacity-80'
                                             }`}
                                         >
                                             {isAdded
@@ -532,7 +532,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     {(phase === 'empty' || phase === 'error' || phase === 'unsupported') && mode === 'scan' && (
                         <div className="px-4 pt-4 pb-6 flex flex-col gap-4">
                             <form onSubmit={handleManualSubmit} className="flex flex-col gap-3">
-                                <p className="text-xs text-gray-500">Or enter the barcode number manually:</p>
+                                <p className="text-xs text-stone-500">Or enter the barcode number manually:</p>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
@@ -540,12 +540,12 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                         value={manualInput}
                                         onChange={e => setManualInput(e.target.value)}
                                         placeholder="e.g. 0602508007898"
-                                        className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition-colors"
+                                        className="flex-1 bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder-stone-600 focus:outline-none focus:border-terracotta-500/50 transition-colors"
                                     />
                                     <button
                                         type="submit"
                                         disabled={!manualInput.trim()}
-                                        className="px-4 py-3 rounded-xl bg-violet-500/20 border border-violet-500/30 text-violet-300 text-sm font-bold min-h-[44px] min-w-[70px] disabled:opacity-40 active:opacity-70"
+                                        className="px-4 py-3 rounded-xl bg-terracotta-500/20 border border-terracotta-500/30 text-terracotta-300 text-sm font-bold min-h-[44px] min-w-[70px] disabled:opacity-40 active:opacity-70"
                                     >
                                         Search
                                     </button>
@@ -553,7 +553,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                             </form>
                             <button
                                 onClick={handleShowSearch}
-                                className="text-xs text-gray-500 hover:text-violet-300 transition-colors text-center"
+                                className="text-xs text-stone-500 hover:text-terracotta-300 transition-colors text-center"
                             >
                                 No barcode? Search by title instead
                             </button>
@@ -563,7 +563,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     {/* Empty / Error — search mode: let the user try a different query */}
                     {(phase === 'empty' || phase === 'error') && mode === 'search' && (
                         <div className="px-4 pt-4 pb-6">
-                            <p className="text-xs text-gray-500 text-center">Try a different search, or switch to Scan to use the camera.</p>
+                            <p className="text-xs text-stone-500 text-center">Try a different search, or switch to Scan to use the camera.</p>
                         </div>
                     )}
                 </div>

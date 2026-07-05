@@ -59,7 +59,7 @@ const BadgeToast = ({ badge, onDismiss }) => {
             style={{ pointerEvents: 'auto' }}
         >
             <div
-                className={`relative rounded-2xl border ${rarity.border} bg-gray-950/95 backdrop-blur-xl overflow-hidden shadow-2xl ${rarity.glow ? `shadow-lg ${rarity.glow}` : ''} max-w-[280px] cursor-pointer`}
+                className={`relative rounded-2xl border ${rarity.border} bg-stone-950/95 backdrop-blur-xl overflow-hidden shadow-2xl ${rarity.glow ? `shadow-lg ${rarity.glow}` : ''} max-w-[280px] cursor-pointer`}
                 onClick={() => {
                     setExiting(true);
                     setTimeout(() => {
@@ -73,12 +73,12 @@ const BadgeToast = ({ badge, onDismiss }) => {
                 }}
             >
                 {/* Shimmer bar on top */}
-                <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-violet-500 via-pink-500 to-violet-500 animate-pulse`} />
+                <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-terracotta-500 via-brass-500 to-terracotta-500 animate-pulse`} />
 
                 {/* Progress bar countdown */}
                 <div className="absolute bottom-0 left-0 h-0.5 bg-white/10 right-0">
                     <div
-                        className="h-full bg-gradient-to-r from-violet-500 to-pink-500"
+                        className="h-full bg-gradient-to-r from-terracotta-500 to-brass-500"
                         style={{ animation: 'shrink-width 4s linear forwards' }}
                     />
                 </div>
@@ -91,13 +91,13 @@ const BadgeToast = ({ badge, onDismiss }) => {
 
                     {/* Content */}
                     <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-400 mb-0.5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-terracotta-400 mb-0.5">
                             🎉 Badge Unlocked!
                         </p>
                         <p className={`text-sm font-bold ${rarity.text} leading-tight`}>
                             {badge.name}
                         </p>
-                        <p className="text-xs text-gray-400 leading-snug line-clamp-2 mt-0.5">
+                        <p className="text-xs text-stone-400 leading-snug line-clamp-2 mt-0.5">
                             {badge.description}
                         </p>
                     </div>

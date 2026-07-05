@@ -48,6 +48,19 @@ export default {
           DEFAULT: "rgb(var(--card) / <alpha-value>)",
           foreground: "rgb(var(--card-foreground) / <alpha-value>)",
         },
+        terracotta: {
+          50: '#f7e1d7', 100: '#f3d3c3', 200: '#ebb89f', 300: '#e29671',
+          400: '#D97748', 500: '#C4622D', 600: '#A84E22',
+          700: '#92441e', 800: '#763718', 900: '#5d2b13', 950: '#251107',
+          DEFAULT: '#C4622D',
+        },
+        brass: {
+          50: '#fdfbf7', 100: '#f8f1e1', 200: '#ecd9af', 300: '#dfc17e',
+          400: '#D9B463', 500: '#C9A24B', 600: '#A8813A',
+          700: '#9b7736', 800: '#86672e', 900: '#735828', 950: '#443518',
+          DEFAULT: '#C9A24B',
+        },
+        parchment: '#F2E9DC',
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -55,8 +68,18 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
+        sans: ["Manrope", "sans-serif"],
+        serif: ["Fraunces", "serif"],
         mono: ["JetBrains Mono", "monospace"],
+      },
+      keyframes: {
+        'spin-slow': {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+      },
+      animation: {
+        'spin-slow': 'spin-slow 8s linear infinite',
       },
     },
   },
