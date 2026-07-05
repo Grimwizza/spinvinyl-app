@@ -11,7 +11,6 @@ const defaultStats = () => ({
     labelPlays: {},
     decadePlays: {},
     totalSessions: 0,
-    totalPlaySeconds: 0,
 });
 
 export const getStoredStats = () => {
@@ -50,7 +49,6 @@ export const recomputeFromSessions = (sessions) => {
             stats.decadePlays[decade] = (stats.decadePlays[decade] || 0) + 1;
         }
         stats.totalSessions += 1;
-        stats.totalPlaySeconds += s.durationSeconds || 0;
     }
     return stats;
 };
@@ -58,7 +56,7 @@ export const recomputeFromSessions = (sessions) => {
 // ─── Session Recording ───────────────────────────────────────────
 
 /**
- * Record a completed listening session.
+ * Record a spin (a single "mark as spun" tap — timestamp only, no duration).
  * @param {object} session
  * @param {number} session.albumId
  * @param {string} session.albumTitle
@@ -66,9 +64,7 @@ export const recomputeFromSessions = (sessions) => {
  * @param {string[]} session.genres
  * @param {number}  session.year
  * @param {string[]} session.labels
- * @param {string}  session.side   — e.g. "A" or "B"
  * @param {string}  session.startTime — ISO-8601
- * @param {number}  session.durationSeconds
  */
 export const recordSession = (session) => {
     const stats = getStoredStats();
@@ -96,7 +92,6 @@ export const recordSession = (session) => {
     }
 
     stats.totalSessions += 1;
-    stats.totalPlaySeconds += session.durationSeconds || 0;
 
     saveStats(stats);
     return stats;
@@ -106,8 +101,8 @@ export const recordSession = (session) => {
 
 const toDateStr = (date) => date.toISOString().slice(0, 10);
 
-/** Total play seconds for a given period. period: 'today' | 'week' | 'month' | 'year' | 'all' */
-export const getPeriodTotalSeconds = (period) => {
+/** Number of spins logged in a given period. period: 'today' | 'week' | 'month' | 'year' | 'all' */
+export const getPeriodSpinCount = (period) => {
     const stats = getStoredStats();
     const now = new Date();
     const today = toDateStr(now);
@@ -129,7 +124,7 @@ export const getPeriodTotalSeconds = (period) => {
             if (period === 'year') return d >= yearStartStr;
             return true; // 'all'
         })
-        .reduce((sum, s) => sum + (s.durationSeconds || 0), 0);
+        .length;
 };
 
 /** Top N albums by play count. Returns array of { albumId, albumTitle, artist, count }. */
@@ -159,14 +154,14 @@ export const getGenreBreakdown = () => {
 
 /**
  * Day activity map for the calendar heatmap.
- * Returns { 'YYYY-MM-DD': totalSeconds }.
+ * Returns { 'YYYY-MM-DD': spinCount }.
  */
 export const getDayMap = () => {
     const stats = getStoredStats();
     const map = {};
     stats.sessions.forEach(s => {
         const day = s.startTime?.slice(0, 10);
-        if (day) map[day] = (map[day] || 0) + (s.durationSeconds || 0);
+        if (day) map[day] = (map[day] || 0) + 1;
     });
     return map;
 };
@@ -201,14 +196,4 @@ export const getCurrentStreak = () => {
 export const getUniqueDays = () => {
     const stats = getStoredStats();
     return new Set(stats.sessions.map(s => s.startTime?.slice(0, 10)).filter(Boolean)).size;
-};
-
-/** Format seconds as a human-readable duration string ("2h 15m"). */
-export const formatDuration = (seconds) => {
-    if (!seconds || seconds < 60) return `${Math.floor(seconds || 0)}s`;
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    if (h === 0) return `${m}m`;
-    if (m === 0) return `${h}h`;
-    return `${h}h ${m}m`;
 };

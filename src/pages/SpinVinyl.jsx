@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil} from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
-import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
-import BadgeToast from '../components/BadgeToast.jsx';
-import AchievementsPage from './AchievementsPage.jsx';
+import { fetchReleasePrice } from '../lib/priceCache.js';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
@@ -394,6 +392,11 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
     const [artistInfo, setArtistInfo] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(false);
+    const [justSpun, setJustSpun] = useState(false);
+    const [expandedTrack, setExpandedTrack] = useState(null); // key of the track showing lyrics
+    const [lyricsText, setLyricsText] = useState('');
+    const [lyricsLoading, setLyricsLoading] = useState(false);
+    const [priceData, setPriceData] = useState(null);
 
     // Lock body scroll while modal is open (iOS + Android)
     useEffect(() => {
@@ -435,6 +438,17 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
             .finally(() => setLoading(false));
     }, [release?.id]);
 
+    // Estimated value — fetched lazily, non-blocking (doesn't gate the main `loading` state)
+    useEffect(() => {
+        if (!release?.id) return;
+        setPriceData(null);
+        let mounted = true;
+        fetchReleasePrice(release.id).then(result => {
+            if (mounted && result) setPriceData(result);
+        });
+        return () => { mounted = false; };
+    }, [release?.id]);
+
     // Backfill missing track durations
     useEffect(() => {
         if (!detail?.tracklist || !release) return;
@@ -465,12 +479,50 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
         return () => { mounted = false; };
     }, [detail?.id]); // Note: running when detail loads or updates
 
+    // ─── Lyrics — fetched on demand for whichever track the user taps, no ─────
+    // "now playing" guesswork involved.
+    useEffect(() => {
+        if (!expandedTrack) return;
+        const artistName = (release?.basic_information?.artists || []).map(a => cleanName(a.name)).join(' ');
+        const cacheKey = `${artistName}/${expandedTrack.title}`;
+        if (lyricsSessionCache.has(cacheKey)) {
+            setLyricsText(lyricsSessionCache.get(cacheKey));
+            setLyricsLoading(false);
+            return;
+        }
+        let mounted = true;
+        setLyricsLoading(true);
+        setLyricsText('');
+        fetch(`/api/lyrics?artist=${encodeURIComponent(artistName)}&title=${encodeURIComponent(expandedTrack.title)}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                const result = data?.lyrics || 'Lyrics not available for this track.';
+                lyricsSessionCache.set(cacheKey, result);
+                if (mounted) setLyricsText(result);
+            })
+            .catch(() => { if (mounted) setLyricsText('Lyrics not available for this track.'); })
+            .finally(() => { if (mounted) setLyricsLoading(false); });
+        return () => { mounted = false; };
+    }, [expandedTrack, release]);
+
+    const handleSpinClick = () => {
+        onSpin(release, detail);
+        setJustSpun(true);
+        setTimeout(() => setJustSpun(false), 2000);
+    };
+
     if (!release) return null;
 
     const info = release.basic_information || {};
     const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
     const sides = detail ? groupTracksBySide(detail.tracklist) : {};
     const sideKeys = Object.keys(sides).sort();
+
+    // Owned copy's stored Media Condition (field_id 1) — matches Discogs' price-suggestion
+    // keys exactly (e.g. "Very Good Plus (VG+)"), so no normalization is needed to look it up.
+    const ownedMediaCondition = release.notes?.find(f => f.field_id === 1)?.value || null;
+    const priceForCondition = ownedMediaCondition && priceData?.suggestions?.[ownedMediaCondition];
+    const lowestListing = priceData?.stats?.lowest_price;
 
     // Clean up Discogs markdown-style formatting from notes
     const cleanDiscogsText = (text) => {
@@ -618,11 +670,15 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                             {/* Spin + Stream buttons */}
                             <div className="flex items-center gap-2 mt-3">
                                 <button
-                                    onClick={() => onSpin(release, detail)}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-terracotta-600 to-brass-600 hover:from-terracotta-500 hover:to-brass-500 text-white text-sm font-bold shadow-lg shadow-terracotta-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    onClick={handleSpinClick}
+                                    disabled={justSpun}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] ${justSpun ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gradient-to-r from-terracotta-600 to-brass-600 hover:from-terracotta-500 hover:to-brass-500 text-white shadow-terracotta-500/25'}`}
                                 >
-                                    <Disc3 size={16} className="animate-spin" style={{ animationDuration: '3s' }} />
-                                    Spin This
+                                    {justSpun ? (
+                                        <><CheckCircle size={16} /> Spun ✓</>
+                                    ) : (
+                                        <><Disc3 size={16} className="animate-spin" style={{ animationDuration: '3s' }} /> Spin This</>
+                                    )}
                                 </button>
                                 {/* Streaming service links */}
                                 <div className="flex items-center gap-1.5">
@@ -701,7 +757,8 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                             {/* About This Release */}
                             {(albumNotes || formattedDate || detail?.country || detail?.labels?.length > 0 ||
                               detail?.formats?.[0]?.descriptions?.length > 0 || creditsByRole ||
-                              detail?.community?.have > 0 || detail?.community?.want > 0) && (
+                              detail?.community?.have > 0 || detail?.community?.want > 0 ||
+                              priceForCondition || lowestListing) && (
                                 <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
                                     <div className="flex items-center gap-2 mb-3">
                                         <Music2 size={14} className="text-brass-400" />
@@ -766,6 +823,31 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                                         </div>
                                     )}
 
+                                    {(priceForCondition || lowestListing) && (
+                                        <div className="mt-2 mb-3">
+                                            <p className="text-[10px] font-semibold uppercase tracking-wider text-stone-500 mb-1.5">Estimated Value</p>
+                                            {priceForCondition && (
+                                                <p className="text-[11px] text-stone-400">
+                                                    <span className="font-semibold text-terracotta-300">{priceForCondition.currency} {Number(priceForCondition.value).toFixed(2)}</span> for your {ownedMediaCondition} copy
+                                                </p>
+                                            )}
+                                            {lowestListing && (
+                                                <p className="text-[11px] text-stone-400 mt-0.5">
+                                                    Lowest listed: <span className="font-semibold text-stone-200">{lowestListing.currency} {Number(lowestListing.value).toFixed(2)}</span>
+                                                    {priceData?.stats?.num_for_sale > 0 && ` · ${priceData.stats.num_for_sale} for sale`}
+                                                </p>
+                                            )}
+                                            <a
+                                                href={`https://www.discogs.com/sell/release/${release.id}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-block text-[11px] font-semibold text-brass-400 hover:text-brass-300 transition-colors mt-1"
+                                            >
+                                                View marketplace →
+                                            </a>
+                                        </div>
+                                    )}
+
                                     {detail?.uri && (
                                         <div className="flex flex-col gap-1 mt-3 border-t border-white/5 pt-3">
                                             <a
@@ -802,19 +884,41 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                                                 </span>
                                             </div>
                                             <div className="space-y-0.5">
-                                                {sides[side].map((track, idx) => (
-                                                    <div key={idx} className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.03] transition-colors group">
-                                                        <span className="text-sm sm:text-xs text-stone-500 w-6 text-right tabular-nums font-medium">
-                                                            {track.position || idx + 1}
-                                                        </span>
-                                                        <span className="flex-1 text-base sm:text-sm text-stone-300 group-hover:text-white transition-colors truncate">
-                                                            {track.title}
-                                                        </span>
-                                                        <span className="text-sm sm:text-xs text-stone-500 tabular-nums">
-                                                            {track.duration || '—'}
-                                                        </span>
-                                                    </div>
-                                                ))}
+                                                {sides[side].map((track, idx) => {
+                                                    const trackKey = `${side}-${idx}`;
+                                                    const isExpanded = expandedTrack?.key === trackKey;
+                                                    return (
+                                                        <div key={idx}>
+                                                            <button
+                                                                onClick={() => setExpandedTrack(isExpanded ? null : { key: trackKey, title: track.title })}
+                                                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/[0.03] transition-colors group text-left ${isExpanded ? 'bg-white/[0.03]' : ''}`}
+                                                            >
+                                                                <span className="text-sm sm:text-xs text-stone-500 w-6 text-right tabular-nums font-medium">
+                                                                    {track.position || idx + 1}
+                                                                </span>
+                                                                <span className={`flex-1 text-base sm:text-sm transition-colors truncate ${isExpanded ? 'text-terracotta-300' : 'text-stone-300 group-hover:text-white'}`}>
+                                                                    {track.title}
+                                                                </span>
+                                                                <Music2 size={13} className={isExpanded ? 'text-terracotta-400' : 'text-stone-600 group-hover:text-stone-400'} />
+                                                                <span className="text-sm sm:text-xs text-stone-500 tabular-nums">
+                                                                    {track.duration || '—'}
+                                                                </span>
+                                                            </button>
+                                                            {isExpanded && (
+                                                                <div className="px-4 pb-3 pt-1">
+                                                                    {lyricsLoading ? (
+                                                                        <div className="flex items-center gap-2 py-4 justify-center">
+                                                                            <Loader2 size={16} className="text-terracotta-400 animate-spin" />
+                                                                            <span className="text-xs text-stone-500">Loading lyrics…</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <p className="text-sm text-stone-400 leading-relaxed whitespace-pre-line">{lyricsText}</p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     ))}
@@ -835,530 +939,6 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
     );
 };
 
-const NowSpinningWidget = ({ details, trackData, onStop, onSessionEnd, onViewAlbum, onArtistClick }) => {
-    const [selectedSide, setSelectedSide] = useState(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [elapsed, setElapsed] = useState(0);
-    const [expanded, setExpanded] = useState(true);
-    const [showLyrics, setShowLyrics] = useState(false);
-    const [lyrics, setLyrics] = useState('');
-    const [lyricsLoading, setLyricsLoading] = useState(false);
-    const [lyricsTrack, setLyricsTrack] = useState('');
-    const timerRef = useRef(null);
-    const startTimeRef = useRef(null);
-    const lyricsRef = useRef(null);
-
-    const sides = trackData ? groupTracksBySide(trackData.tracklist) : {};
-    const sideKeys = Object.keys(sides).sort();
-    const hasSides = sideKeys.length > 0;
-
-    // Auto-select first side
-    useEffect(() => {
-        if (sideKeys.length > 0 && !selectedSide) {
-            setSelectedSide(sideKeys[0]);
-        }
-    }, [sideKeys, selectedSide]);
-
-    // Reset when album changes
-    useEffect(() => {
-        setIsPlaying(false);
-        setElapsed(0);
-        setSelectedSide(null);
-        setLyrics('');
-        setLyricsTrack('');
-        setShowLyrics(false);
-        if (timerRef.current) clearInterval(timerRef.current);
-    }, [details?.id]);
-
-    // Timer
-    useEffect(() => {
-        if (isPlaying) {
-            startTimeRef.current = Date.now() - elapsed * 1000;
-            timerRef.current = setInterval(() => {
-                setElapsed((Date.now() - startTimeRef.current) / 1000);
-            }, 250);
-        } else {
-            if (timerRef.current) clearInterval(timerRef.current);
-        }
-        return () => { if (timerRef.current) clearInterval(timerRef.current); };
-    }, [isPlaying]);
-
-    const handlePlay = () => {
-        if (!selectedSide) return;
-        setIsPlaying(!isPlaying);
-    };
-
-    const handleSideChange = (side) => {
-        setSelectedSide(side);
-        setIsPlaying(false);
-        setElapsed(0);
-        setLyrics('');
-        setLyricsTrack('');
-    };
-
-    const handleTrackSelect = (idx) => {
-        if (!selectedSide || !sides[selectedSide]) return;
-        const tracks = sides[selectedSide];
-        let cumulative = 0;
-        for (let i = 0; i < idx; i++) {
-            cumulative += tracks[i].durationSeconds || 0;
-        }
-        setElapsed(cumulative);
-        startTimeRef.current = Date.now() - cumulative * 1000;
-        setIsPlaying(true);
-        setLyrics('');
-        setLyricsTrack('');
-    };
-
-    // Find current track based on elapsed time
-    const currentTrackInfo = useMemo(() => {
-        if (!selectedSide || !sides[selectedSide]) return null;
-        const tracks = sides[selectedSide];
-        let cumulative = 0;
-        for (let i = 0; i < tracks.length; i++) {
-            const dur = tracks[i].durationSeconds;
-            if (dur <= 0) {
-                // If no duration data, just show first track with unknown timing
-                if (i === 0 && elapsed === 0) return { track: tracks[i], index: i, progress: 0, total: tracks.length };
-                continue;
-            }
-            cumulative += dur;
-            if (elapsed < cumulative) {
-                const trackElapsed = elapsed - (cumulative - dur);
-                return {
-                    track: tracks[i],
-                    index: i,
-                    progress: trackElapsed / dur,
-                    trackElapsed,
-                    trackDuration: dur,
-                    total: tracks.length,
-                };
-            }
-        }
-        // Past all tracks — side is done
-        const lastTrack = tracks[tracks.length - 1];
-        return { track: lastTrack, index: tracks.length - 1, progress: 1, done: true, total: tracks.length };
-    }, [selectedSide, sides, elapsed]);
-
-    const fetchLyricsWithFallback = useCallback(async (artist, title) => {
-        const cacheKey = `${artist}/${title}`;
-        if (lyricsSessionCache.has(cacheKey)) return lyricsSessionCache.get(cacheKey);
-        try {
-            const res = await fetch(`/api/lyrics?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.lyrics) {
-                    lyricsSessionCache.set(cacheKey, data.lyrics);
-                    return data.lyrics;
-                }
-            }
-            return 'Lyrics not available for this track.';
-        } catch (error) {
-            console.error('[Lyrics Fetch] Error:', error);
-            return 'Lyrics not available for this track.';
-        }
-    }, []);
-
-    // Single consolidated lyrics effect — avoids the lyricsLoading-in-deps cycle
-    // that caused React to cleanup (mounted=false) before the fetch resolved.
-    const lyricsFetchingRef = useRef(false);
-
-    useEffect(() => {
-        const trackTitle = currentTrackInfo?.track?.title;
-        const artistName = details?.artist;
-
-        // Nothing to fetch
-        if (!trackTitle || !artistName) return;
-
-        const trackKey = `${artistName}/${trackTitle}`;
-
-        // If lyrics panel isn't visible, just keep track of which track we're on
-        if (!showLyrics) {
-            // If the track changed while lyrics were hidden, clear stale lyrics
-            if (trackKey !== lyricsTrack) {
-                setLyricsTrack(trackKey);
-                setLyrics('');
-            }
-            return;
-        }
-
-        // Lyrics panel is open — do we need to fetch?
-        // Skip if we already have lyrics for this track, or a fetch is in flight
-        if ((trackKey === lyricsTrack && lyrics) || lyricsFetchingRef.current) return;
-
-        // New track or no lyrics yet — fetch
-        lyricsFetchingRef.current = true;
-        setLyricsTrack(trackKey);
-        setLyricsLoading(true);
-        setLyrics('');
-
-        let mounted = true;
-        fetchLyricsWithFallback(artistName, trackTitle).then(result => {
-            if (mounted) {
-                setLyrics(result);
-                setLyricsLoading(false);
-                lyricsFetchingRef.current = false;
-            }
-        });
-
-        return () => {
-            mounted = false;
-            lyricsFetchingRef.current = false;
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showLyrics, currentTrackInfo?.track?.title, details?.artist, fetchLyricsWithFallback]);
-
-    // Scroll lyrics to top when track changes
-    useEffect(() => {
-        if (lyricsRef.current) lyricsRef.current.scrollTop = 0;
-    }, [lyricsTrack]);
-
-    // Total side duration
-    const sideDuration = selectedSide && sides[selectedSide]
-        ? sides[selectedSide].reduce((sum, t) => sum + t.durationSeconds, 0)
-        : 0;
-
-    if (!details) return null;
-
-    return (
-        <>
-            {expanded ? (
-                <div className="fixed inset-0 z-[100] bg-stone-950 flex flex-col md:flex-row h-[100dvh] overflow-hidden animate-slide-up">
-                    {/* Background Glass/Blur Effects */}
-                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                        <div className="absolute -top-[20%] -right-[10%] w-[70vw] h-[70vw] rounded-full bg-terracotta-900/20 blur-[120px]" />
-                        <div className="absolute -bottom-[20%] -left-[10%] w-[70vw] h-[70vw] rounded-full bg-brass-900/20 blur-[120px]" />
-                    </div>
-
-                    {/* Top Controls */}
-                    <div className="absolute top-4 right-4 sm:top-8 sm:right-8 flex gap-3 z-50" style={{ marginTop: 'env(safe-area-inset-top, 0px)' }}>
-                        <button
-                            onClick={() => setExpanded(false)}
-                            className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all hover:scale-105"
-                            title="Minimize Player"
-                        >
-                            <ChevronDown size={24} />
-                        </button>
-                        <button
-                            onClick={() => {
-                                // Record the session if long enough
-                                if (elapsed >= 30 && details && selectedSide) {
-                                    onSessionEnd?.({
-                                        albumId: details.id,
-                                        albumTitle: details.title || 'Unknown',
-                                        artist: details.artist || 'Unknown',
-                                        genres: details.genres || [],
-                                        year: parseInt(details.year) || 0,
-                                        labels: details.label ? [details.label] : [],
-                                        side: selectedSide,
-                                        startTime: startTimeRef.current || new Date().toISOString(),
-                                        durationSeconds: elapsed,
-                                    });
-                                }
-                                onStop();
-                            }}
-                            className="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-white transition-all hover:scale-105"
-                            title="Stop Spinning"
-                        >
-                            <X size={24} />
-                        </button>
-                    </div>
-
-                    {/* Left Side: Big Vinyl */}
-                    <div className="flex-shrink-0 flex flex-col items-center justify-center min-h-[25vh] md:min-h-screen relative z-10 pt-12 md:pt-0">
-                        <div className="relative w-48 h-48 sm:w-64 sm:h-64 md:w-[420px] md:h-[420px]">
-
-                            {/* Album Sleeve (Behind) */}
-                            {details.cover && (
-                                <div className={`absolute inset-0 rounded-sm shadow-2xl transition-all duration-1000 ease-in-out border border-white/10 z-0 ${isPlaying ? '-translate-x-4 md:-translate-x-12 rotate-[-4deg] opacity-90 scale-95' : 'translate-x-0 rotate-0 opacity-100 scale-100'}`}>
-                                    <img src={details.cover} alt="Album Sleeve" className="w-full h-full object-cover rounded-sm" />
-                                    <div className="absolute inset-0 bg-black/5 rounded-sm pointer-events-none" />
-                                </div>
-                            )}
-
-                            {/* Spinning Record Wrapper (In front) */}
-                            <div className={`absolute inset-0 z-10 transition-transform duration-1000 ease-in-out ${isPlaying ? 'translate-x-4 md:translate-x-12' : 'translate-x-0'}`}>
-                                <div className={`w-full h-full rounded-full bg-gradient-to-br from-stone-800 via-stone-900 to-black shadow-[0_10px_40px_rgba(0,0,0,0.3)] ${isPlaying ? 'vinyl-spin' : ''}`}>
-                                    <div className="absolute inset-[3px] rounded-full border border-stone-700/30 pointer-events-none" />
-                                    <div className="absolute inset-[10px] sm:inset-[16px] rounded-full border border-stone-700/20 pointer-events-none" />
-                                    <div className="absolute inset-[24px] sm:inset-[32px] rounded-full border border-stone-700/30 pointer-events-none" />
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <div className="w-24 h-24 md:w-36 md:h-36 rounded-full overflow-hidden border border-stone-700 shadow-[inset_0_4px_10px_rgba(0,0,0,0.6)]">
-                                            {details.cover ? (
-                                                <img src={details.cover} alt="" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="w-full h-full bg-gradient-to-br from-terracotta-600 to-brass-500" />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                        <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-stone-950 border border-stone-700" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Side: Info & Controls */}
-                    <div className="flex-1 flex flex-col justify-start max-w-2xl px-6 pb-4 md:p-12 z-10 mx-auto md:mx-0 w-full min-h-0 overflow-hidden">
-                        <div className="mb-2 text-center md:text-left shrink-0">
-                            <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
-                                <Volume2 size={20} className={`flex-shrink-0 ${isPlaying ? 'text-terracotta-400 animate-pulse' : 'text-stone-500'}`} />
-                                <span className="text-xs font-bold uppercase tracking-[0.2em] text-terracotta-400">
-                                    Now Spinning
-                                </span>
-                            </div>
-                            <h2
-                                className="text-2xl md:text-6xl font-black text-white leading-tight mb-0.5 truncate cursor-pointer hover:text-terracotta-300 transition-colors title-wrap"
-                                onClick={() => {
-                                    setExpanded(false);
-                                    if (onViewAlbum) onViewAlbum();
-                                }}
-                                title={details.title}
-                                style={{ whiteSpace: 'normal', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
-                            >
-                                {details.title}
-                            </h2>
-                            <h3
-                                className="text-xl md:text-2xl text-stone-400 truncate cursor-pointer hover:text-terracotta-300 transition-colors"
-                                onClick={() => {
-                                    setExpanded(false);
-                                    if (onArtistClick) onArtistClick(details.artist);
-                                }}
-                            >
-                                {details.artist}
-                            </h3>
-                        </div>
-
-                        {/* Side Tabs */}
-                        {hasSides && (
-                            <div className="flex items-center md:justify-start justify-center gap-2 mb-4 shrink-0 flex-wrap">
-                                {sideKeys.map(side => (
-                                    <button
-                                        key={side}
-                                        onClick={() => handleSideChange(side)}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border ${selectedSide === side
-                                            ? 'bg-terracotta-500/20 text-terracotta-300 border-terracotta-500/30 shadow-lg shadow-terracotta-500/10'
-                                            : 'bg-white/5 text-stone-400 border-white/5 hover:text-white hover:bg-white/10'
-                                            }`}
-                                    >
-                                        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border ${selectedSide === side ? 'border-terracotta-400 bg-terracotta-500/30 text-white' : 'border-stone-500 bg-stone-800/50'
-                                            }`}>
-                                            {side}
-                                        </div>
-                                        Side {side}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Tracklist & Lyrics Container */}
-                        <div className="rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-md overflow-hidden flex flex-col flex-1 min-h-0 max-h-[440px] md:max-h-none mb-4">
-
-                            {/* Tab Headers */}
-                            <div className="flex border-b border-white/10 shrink-0">
-                                <button
-                                    onClick={() => setShowLyrics(false)}
-                                    className={`flex-1 py-4 text-sm font-bold transition-colors ${!showLyrics ? 'text-terracotta-300 border-b-2 border-terracotta-400 bg-white/[0.02]' : 'text-stone-500 hover:text-stone-300'}`}
-                                >
-                                    Tracklist
-                                </button>
-                                <button
-                                    onClick={() => setShowLyrics(true)}
-                                    className={`flex-1 py-4 flex items-center justify-center gap-2 text-sm font-bold transition-colors ${showLyrics ? 'text-brass-400 border-b-2 border-brass-400 bg-white/[0.02]' : 'text-stone-500 hover:text-stone-300'}`}
-                                >
-                                    <Music2 size={16} /> Lyrics
-                                </button>
-                            </div>
-
-                            {/* Content Area */}
-                            <div className="overflow-y-auto p-2 scrollbar-thin flex-1 relative min-h-[200px]">
-                                {!showLyrics ? (
-                                    selectedSide && sides[selectedSide] ? (
-                                        <div className="space-y-1">
-                                            {sides[selectedSide].map((track, idx) => {
-                                                const isCurrent = currentTrackInfo?.index === idx && isPlaying;
-                                                return (
-                                                    <div
-                                                        key={idx}
-                                                        onClick={() => handleTrackSelect(idx)}
-                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all cursor-pointer ${isCurrent
-                                                            ? 'bg-terracotta-500/15 text-terracotta-200 shadow-sm'
-                                                            : 'text-stone-400 hover:bg-white/[0.03] hover:text-stone-200'
-                                                            }`}
-                                                    >
-                                                        {/* Progress background for current track */}
-                                                        {isCurrent && currentTrackInfo.trackDuration > 0 && (
-                                                            <div
-                                                                className="absolute inset-0 bg-terracotta-500/10 rounded-xl transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-                                                                style={{ width: `${Math.min(currentTrackInfo.progress * 100, 100)}%` }}
-                                                            />
-                                                        )}
-
-                                                        <div className="relative flex items-center w-full gap-3">
-                                                            {isCurrent ? (
-                                                                <Volume2 size={16} className="text-terracotta-400 animate-pulse flex-shrink-0" />
-                                                            ) : (
-                                                                <span className="w-5 text-right font-medium text-stone-500 flex-shrink-0">{track.position || idx + 1}</span>
-                                                            )}
-                                                            <span className={`flex-1 min-w-0 truncate ${isCurrent ? 'font-bold' : ''}`}>
-                                                                {track.title}
-                                                            </span>
-                                                            <span className="text-sm font-medium tabular-nums opacity-80">
-                                                                {track.duration || '—'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="flex h-full items-center justify-center text-sm text-stone-500">
-                                            Select a side to view tracks
-                                        </div>
-                                    )
-                                ) : (
-                                    <div ref={lyricsRef} className="p-4 h-full">
-                                        {lyricsLoading ? (
-                                            <div className="flex h-full items-center justify-center flex-col gap-3">
-                                                <Loader2 size={24} className="text-brass-400 animate-spin" />
-                                                <span className="text-sm text-stone-400 font-medium">Loading {currentTrackInfo?.track?.title}...</span>
-                                            </div>
-                                        ) : (
-                                            <p className="text-sm md:text-base text-stone-300 leading-relaxed whitespace-pre-line text-center">
-                                                {lyrics}
-                                            </p>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Player Controls Bar */}
-                        <div className="w-full border-t border-white/10 p-4 shrink-0 bg-stone-950/30 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] md:pb-4 rounded-2xl md:rounded-b-2xl">
-                            <div className="flex items-center gap-5 relative z-10">
-                                <button
-                                    onClick={handlePlay}
-                                    disabled={!selectedSide}
-                                    className={`flex items-center justify-center w-14 h-14 shrink-0 rounded-full transition-all ${isPlaying
-                                        ? 'bg-terracotta-500 text-white shadow-[0_0_20px_rgba(196,98,45,0.4)] hover:scale-105 active:scale-95'
-                                        : 'bg-white/10 text-white hover:bg-white/20 border border-white/10 hover:scale-105 active:scale-95'
-                                        } disabled:opacity-30 disabled:hover:scale-100`}
-                                >
-                                    {isPlaying ? <Pause size={24} /> : <Play size={24} className="ml-1" />}
-                                </button>
-
-                                <div className="flex-1 min-w-0">
-                                    {currentTrackInfo ? (
-                                        <div className="flex justify-between items-end mb-2">
-                                            <p className="text-sm font-bold text-white truncate pr-2">
-                                                {currentTrackInfo.done ? 'Side complete' : currentTrackInfo.track?.title || 'Unknown Track'}
-                                            </p>
-                                            <p className="text-xs font-medium text-stone-400 tabular-nums shrink-0">
-                                                {formatTime(elapsed)} {sideDuration > 0 ? `/ ${formatTime(sideDuration)}` : ''}
-                                            </p>
-                                        </div>
-                                    ) : (
-                                        <div className="mb-2">
-                                            <p className="text-sm font-bold text-stone-500">No track playing</p>
-                                        </div>
-                                    )}
-
-                                    {/* Overall progress bar */}
-                                    <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
-                                        <div
-                                            className="h-full bg-gradient-to-r from-terracotta-500 to-brass-500 rounded-full transition-all duration-200 ease-out"
-                                            style={{ width: `${Math.min((elapsed / (sideDuration || 1)) * 100, 100)}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                /* --- Minimized Player --- */
-                <div className="now-spinning-overlay fixed bottom-[calc(60px+env(safe-area-inset-bottom,0px)+8px)] left-2 right-2 sm:bottom-6 sm:left-auto sm:right-6 z-[110] animate-slide-up sm:max-w-[320px] sm:w-full">
-                    <div
-                        className="relative rounded-2xl bg-stone-900/95 backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 overflow-hidden cursor-pointer hover:bg-stone-800/95 transition-colors group"
-                        onClick={() => setExpanded(true)}
-                    >
-                        {/* Close button */}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onStop(); }}
-                            className="absolute top-1/2 -translate-y-1/2 right-3 z-10 p-2 rounded-full hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                            aria-label="Stop spinning"
-                        >
-                            <X size={16} className="text-stone-400 hover:text-white" />
-                        </button>
-
-                        <div className="flex items-center gap-3 p-3 pr-12 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:pb-3">
-                            {/* Spinning Vinyl */}
-                            <div className="relative flex-shrink-0 w-12 h-12">
-                                <div className={`absolute inset-0 rounded-full bg-gradient-to-br from-stone-800 via-stone-900 to-black shadow-lg ${isPlaying ? 'vinyl-spin' : ''}`}>
-                                    <div className="absolute inset-[2px] rounded-full border border-stone-700/30" />
-                                    <div className="absolute inset-[4px] rounded-full border border-stone-700/20" />
-                                    <div className="absolute inset-[6px] rounded-full border border-stone-700/30" />
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="w-4 h-4 rounded-full overflow-hidden border border-stone-700">
-                                            {details.cover ? (
-                                                <img src={details.cover} alt="" className="w-full h-full object-cover" />
-                                            ) : (
-                                                <div className="w-full h-full bg-gradient-to-br from-terracotta-600 to-brass-500" />
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                        <div className="w-1 h-1 rounded-full bg-stone-950 border border-stone-700" />
-                                    </div>
-                                </div>
-
-                                {/* Play/Pause Overlay on Hover */}
-                                <div
-                                    className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
-                                    onClick={(e) => { e.stopPropagation(); handlePlay(); }}
-                                >
-                                    {isPlaying ? <Pause size={16} className="text-white" /> : <Play size={16} className="text-white ml-0.5" />}
-                                </div>
-                            </div>
-
-                            {/* Track Info */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 mb-0.5">
-                                    <Volume2 size={10} className={`flex-shrink-0 ${isPlaying ? 'text-terracotta-400 animate-pulse' : 'text-stone-500'}`} />
-                                    <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-terracotta-400">
-                                        Now Spinning
-                                    </span>
-                                </div>
-                                <p className="text-sm font-bold text-white truncate leading-tight">
-                                    {details.title}
-                                </p>
-                                <p className="text-sm sm:text-xs text-stone-400 truncate">
-                                    {details.artist}
-                                </p>
-                            </div>
-
-                            <div className="pr-3 text-stone-500 group-hover:text-white transition-colors">
-                                <ChevronDown size={20} className="rotate-180" />
-                            </div>
-                        </div>
-
-                        {/* Slim progress bar at bottom */}
-                        {isPlaying && sideDuration > 0 && (
-                            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/5">
-                                <div
-                                    className="h-full bg-gradient-to-r from-terracotta-500 to-brass-500"
-                                    style={{ width: `${Math.min((elapsed / sideDuration) * 100, 100)}%` }}
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-        </>
-    );
-};
-
 // ─── Vinyl Collection Page ──────────────────────────────────────
 export const SpinVinyl = () => {
     useSpinPWA();
@@ -1368,9 +948,6 @@ export const SpinVinyl = () => {
     const [error, setError] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [totalItems, setTotalItems] = useState(0);
-    const [nowSpinning, setNowSpinning] = useState(null);
-    const [spinningDetails, setSpinningDetails] = useState(null);
-    const [spinningTrackData, setSpinningTrackData] = useState(null);
     const [selectedAlbum, setSelectedAlbum] = useState(null); // For detail modal
 
     // Auth State
@@ -1385,12 +962,11 @@ export const SpinVinyl = () => {
     const [sortBy, setSortBy] = useState(() => localStorage.getItem('vinylSort') || 'added-desc');
     const [showSortMenu, setShowSortMenu] = useState(false);
 
-    // ─── Gamification State ──────────────────────────────────────
-    const [activePage, setActivePage] = useState('collection'); // 'collection' | 'achievements' | 'stats'
+    // ─── Scanning / Stats State ────────────────────────────────────
+    const [activePage, setActivePage] = useState('collection'); // 'collection' | 'stats' | 'releases'
     const [showScanner, setShowScanner] = useState(false);
     const [collectionFolders, setCollectionFolders] = useState([]);
     const [collectionFields, setCollectionFields] = useState(null);
-    const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
@@ -1580,31 +1156,20 @@ export const SpinVinyl = () => {
         clearCollectionCache();
     };
 
-    // ─── "Spin This" from modal ─────────────────────────────────
-    const handleSpin = (release, detail) => {
+    // ─── "Mark as Spun" from the album detail modal ──────────────
+    // Logs a timestamp only — no timer, no fake now-playing detection.
+    // The modal stays open so the user can keep browsing tracklist/lyrics/credits.
+    const handleMarkAsSpun = (release, detail) => {
         const info = release.basic_information || {};
-        const spinInfo = {
-            id: release.id,
-            title: cleanName(info.title || detail?.title || 'Unknown'),
+        handleSessionEnd({
+            albumId: release.id,
+            albumTitle: cleanName(info.title || detail?.title || 'Unknown'),
             artist: (info.artists || []).map(a => cleanName(a.name)).join(', ') || 'Unknown',
-            year: info.year || detail?.year || '',
-            cover: detail?.images?.[0]?.uri || info.cover_image || info.thumb || '',
-            label: info.labels?.[0]?.name || '',
-            format: info.formats?.[0]?.name || 'Vinyl',
-        };
-
-        setNowSpinning(spinInfo);
-        setSpinningDetails(spinInfo);
-        setSpinningTrackData(detail);
-        setSelectedAlbum(null); // Close modal
-        localStorage.setItem('nowSpinning', JSON.stringify(spinInfo));
-    };
-
-    const stopSpinning = () => {
-        setNowSpinning(null);
-        setSpinningDetails(null);
-        setSpinningTrackData(null);
-        localStorage.removeItem('nowSpinning');
+            genres: [...new Set([...(info.genres || []), ...(detail?.genres || [])])],
+            year: parseInt(info.year || detail?.year, 10) || 0,
+            labels: info.labels?.[0]?.name ? [info.labels[0].name] : [],
+            startTime: new Date().toISOString(),
+        });
     };
 
     // ─── Fetch folders + collection field definitions once (used by the album edit form) ─
@@ -1632,20 +1197,15 @@ export const SpinVinyl = () => {
         return () => window.removeEventListener('online', handleOnline);
     }, [authUsername]);
 
-    // ─── Gamification: record session + check badges ─────────────
+    // ─── Record a spin (local-first, synced across devices) ───────
     const handleSessionEnd = useCallback(async (sessionData) => {
         try {
-            const updatedStats = await recordSessionWithSync(sessionData, authUsername);
-            const collectionMeta = { total: totalItems };
-            const newBadges = checkAndAwardBadges(updatedStats, collectionMeta);
-            if (newBadges.length > 0) {
-                setPendingBadges(prev => [...prev, ...newBadges]);
-            }
+            await recordSessionWithSync(sessionData, authUsername);
             setOfflineQueueSize(getOfflineQueue().length);
         } catch (e) {
             console.error('[SpinVinyl] Session recording error:', e);
         }
-    }, [totalItems, authUsername]);
+    }, [authUsername]);
 
     // ─── Filter & Sort ──────────────────────────────────────────
     const filteredAndSorted = useMemo(() => {
@@ -1772,11 +1332,8 @@ export const SpinVinyl = () => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-black text-white pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))]">
             {/* ─── Page Router ──────────────────────────────── */}
-            {activePage === 'achievements' && (
-                <AchievementsPage collectionCount={totalItems} />
-            )}
             {activePage === 'stats' && (
-                <StatsPage collectionCount={totalItems} />
+                <StatsPage collectionCount={totalItems} releases={releases} />
             )}
             {activePage === 'releases' && (
                 <ReleasesPage
@@ -1926,8 +1483,7 @@ export const SpinVinyl = () => {
                         <RecommendWidget
                             releases={releases}
                             albumPlayCounts={getStoredStats().albumPlayCounts}
-                            nowSpinningId={nowSpinning?.id ?? null}
-                            onSpinThis={handleAlbumClick}
+                            onSpinThis={handleMarkAsSpun}
                         />
                     )}
 
@@ -1962,22 +1518,15 @@ export const SpinVinyl = () => {
                                             {groupItems.map((release) => {
                                                 const info = release.basic_information || {};
                                                 const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
-                                                const isSpinning = nowSpinning?.id === release.id;
                                                 return (
                                                     <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                                        className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-terracotta-500/60 active:scale-95 active:opacity-80 ${isSpinning ? 'ring-2 ring-terracotta-500 shadow-lg shadow-terracotta-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
+                                                        className="group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-terracotta-500/60 active:scale-95 active:opacity-80 hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40">
                                                         <div className="aspect-square relative overflow-hidden bg-stone-800">
                                                             <AlbumArt release={release} alt={`${cleanName(info.title)} by ${artist}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" fallbackSize={40} />
-                                                            <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSpinning ? 'bg-terracotta-900/40' : 'bg-black/0 group-hover:bg-black/50'}`}>
-                                                                {isSpinning ? (
-                                                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-terracotta-500/90 text-white text-xs font-bold">
-                                                                        <Volume2 size={14} className="animate-pulse" /> NOW SPINNING
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
-                                                                        <Music2 size={14} /> VIEW ALBUM
-                                                                    </div>
-                                                                )}
+                                                            <div className="absolute inset-0 flex items-center justify-center transition-all duration-300 bg-black/0 group-hover:bg-black/50">
+                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
+                                                                    <Music2 size={14} /> VIEW ALBUM
+                                                                </div>
                                                             </div>
                                                         </div>
                                                         <div className="p-3 bg-white/[0.03]">
@@ -2009,22 +1558,15 @@ export const SpinVinyl = () => {
                                     {filteredAndSorted.map((release) => {
                                         const info = release.basic_information || {};
                                         const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
-                                        const isSpinning = nowSpinning?.id === release.id;
                                         return (
                                             <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                                className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-terracotta-500/60 active:scale-95 active:opacity-80 ${isSpinning ? 'ring-2 ring-terracotta-500 shadow-lg shadow-terracotta-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
+                                                className="group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-terracotta-500/60 active:scale-95 active:opacity-80 hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40">
                                                 <div className="aspect-square relative overflow-hidden bg-stone-800">
                                                     <AlbumArt release={release} alt={`${cleanName(info.title)} by ${artist}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" fallbackSize={40} />
-                                                    <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSpinning ? 'bg-terracotta-900/40' : 'bg-black/0 group-hover:bg-black/50'}`}>
-                                                        {isSpinning ? (
-                                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-terracotta-500/90 text-white text-xs font-bold">
-                                                                <Volume2 size={14} className="animate-pulse" /> NOW SPINNING
-                                                            </div>
-                                                        ) : (
-                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
-                                                                <Music2 size={14} /> VIEW ALBUM
-                                                            </div>
-                                                        )}
+                                                    <div className="absolute inset-0 flex items-center justify-center transition-all duration-300 bg-black/0 group-hover:bg-black/50">
+                                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
+                                                            <Music2 size={14} /> VIEW ALBUM
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div className="p-3 bg-white/[0.03]">
@@ -2067,17 +1609,15 @@ export const SpinVinyl = () => {
                                             {groupItems.map((release) => {
                                                 const info = release.basic_information || {};
                                                 const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
-                                                const isSpinning = nowSpinning?.id === release.id;
                                                 return (
                                                     <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                                        className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] ${isSpinning ? 'bg-terracotta-500/10 border-l-2 border-terracotta-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
+                                                        className="w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] hover:bg-white/[0.03] border-l-2 border-transparent">
                                                         <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-800 flex-shrink-0 relative">
                                                             <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
-                                                            {isSpinning && <div className="absolute inset-0 bg-terracotta-500/30 flex items-center justify-center"><Volume2 size={12} className="text-white animate-pulse" /></div>}
                                                         </div>
                                                         <div className="min-w-0 sm:contents">
                                                             <div className="min-w-0">
-                                                                <p className={`text-sm font-medium truncate ${isSpinning ? 'text-terracotta-300' : 'text-white group-hover:text-terracotta-300'} transition-colors`} title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                                                                <p className="text-sm font-medium truncate text-white group-hover:text-terracotta-300 transition-colors" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
                                                                 <p
                                                                     className="text-sm sm:text-xs text-stone-500 truncate sm:hidden mt-0.5 hover:text-terracotta-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
                                                                     onClick={(e) => {
@@ -2102,7 +1642,7 @@ export const SpinVinyl = () => {
                                                             <p className="hidden sm:block text-sm text-stone-500 tabular-nums">{info.year > 0 ? info.year : '—'}</p>
                                                             <p className="hidden sm:block text-xs text-stone-500 truncate">{info.labels?.[0]?.name || '—'}</p>
                                                             <div className="hidden sm:flex justify-end">
-                                                                <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${isSpinning ? 'bg-terracotta-500/20 text-terracotta-300' : 'bg-white/5 text-stone-500'}`}>{info.formats?.[0]?.name || 'Vinyl'}</span>
+                                                                <span className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-white/5 text-stone-500">{info.formats?.[0]?.name || 'Vinyl'}</span>
                                                             </div>
                                                         </div>
                                                     </button>
@@ -2116,17 +1656,15 @@ export const SpinVinyl = () => {
                                     {filteredAndSorted.map((release) => {
                                         const info = release.basic_information || {};
                                         const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
-                                        const isSpinning = nowSpinning?.id === release.id;
                                         return (
                                             <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                                className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] ${isSpinning ? 'bg-terracotta-500/10 border-l-2 border-terracotta-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
+                                                className="w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] hover:bg-white/[0.03] border-l-2 border-transparent">
                                                 <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-800 flex-shrink-0 relative">
                                                     <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
-                                                    {isSpinning && <div className="absolute inset-0 bg-terracotta-500/30 flex items-center justify-center"><Volume2 size={12} className="text-white animate-pulse" /></div>}
                                                 </div>
                                                 <div className="min-w-0 sm:contents">
                                                     <div className="min-w-0">
-                                                        <p className={`text-sm font-medium truncate ${isSpinning ? 'text-terracotta-300' : 'text-white group-hover:text-terracotta-300'} transition-colors`} title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                                                        <p className="text-sm font-medium truncate text-white group-hover:text-terracotta-300 transition-colors" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
                                                         <p
                                                             className="text-sm sm:text-xs text-stone-500 truncate sm:hidden mt-0.5 hover:text-terracotta-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
                                                             onClick={(e) => {
@@ -2151,7 +1689,7 @@ export const SpinVinyl = () => {
                                                     <p className="hidden sm:block text-sm text-stone-500 tabular-nums">{info.year > 0 ? info.year : '—'}</p>
                                                     <p className="hidden sm:block text-xs text-stone-500 truncate">{info.labels?.[0]?.name || '—'}</p>
                                                     <div className="hidden sm:flex justify-end">
-                                                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${isSpinning ? 'bg-terracotta-500/20 text-terracotta-300' : 'bg-white/5 text-stone-500'}`}>{info.formats?.[0]?.name || 'Vinyl'}</span>
+                                                        <span className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-white/5 text-stone-500">{info.formats?.[0]?.name || 'Vinyl'}</span>
                                                     </div>
                                                 </div>
                                             </button>
@@ -2205,7 +1743,6 @@ export const SpinVinyl = () => {
                     {[
                         { id: 'collection', label: 'Collection', icon: Disc, requiresAuth: true },
                         { id: 'releases', label: 'Explore', icon: Compass, requiresAuth: false },
-                        { id: 'achievements', label: 'Badges', icon: Trophy, requiresAuth: true },
                         { id: 'stats', label: 'Stats', icon: BarChart2, requiresAuth: true },
                     ].map(tab => {
                         const isLocked = isGuestMode && tab.requiresAuth;
@@ -2243,7 +1780,7 @@ export const SpinVinyl = () => {
                 <AlbumDetailModal
                     release={selectedAlbum}
                     onClose={() => setSelectedAlbum(null)}
-                    onSpin={handleSpin}
+                    onSpin={handleMarkAsSpun}
                     onArtistSearch={(artist) => {
                         setSearchQuery(artist);
                         setSelectedAlbum(null);
@@ -2252,33 +1789,6 @@ export const SpinVinyl = () => {
                     folders={collectionFolders}
                     collectionFields={collectionFields}
                     onItemEdited={handleItemEdited}
-                />
-            )}
-
-            {/* Now Spinning Widget */}
-            <NowSpinningWidget
-                details={spinningDetails}
-                trackData={spinningTrackData}
-                onStop={stopSpinning}
-                onSessionEnd={handleSessionEnd}
-                onViewAlbum={() => {
-                    if (spinningDetails && releases) {
-                        const release = releases.find(r => r.id === spinningDetails.id);
-                        if (release) handleAlbumClick(release);
-                    }
-                }}
-                onArtistClick={(artistName) => {
-                    setSearchQuery(artistName);
-                    setSelectedAlbum(null); // close modal if open to see results
-                    window.scrollTo({ top: 0, behavior: 'smooth' }); // scroll to top to see search
-                }}
-            />
-
-            {/* Badge Toast — shows queue one at a time */}
-            {pendingBadges.length > 0 && (
-                <BadgeToast
-                    badge={pendingBadges[0]}
-                    onDismiss={() => setPendingBadges(prev => prev.slice(1))}
                 />
             )}
 
@@ -2305,7 +1815,7 @@ export const SpinVinyl = () => {
                         <Logo variant="icon" size="md" />
                         <h2 className="text-xl font-black text-white">Connect Discogs</h2>
                         <p className="text-stone-400 text-sm text-center max-w-xs">
-                            Sign in to access your collection, badges, stats, and more personalised features.
+                            Sign in to access your collection, stats, and more personalised features.
                         </p>
                         <a
                             href="/api/discogs?action=login"

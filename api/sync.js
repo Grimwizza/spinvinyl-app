@@ -50,7 +50,6 @@ function recomputeStats(sessions) {
         labelPlays: {},
         decadePlays: {},
         totalSessions: 0,
-        totalPlaySeconds: 0,
     };
     for (const s of sessions) {
         const key = String(s.albumId);
@@ -62,7 +61,6 @@ function recomputeStats(sessions) {
             stats.decadePlays[decade] = (stats.decadePlays[decade] || 0) + 1;
         }
         stats.totalSessions += 1;
-        stats.totalPlaySeconds += s.durationSeconds || 0;
     }
     return stats;
 }
@@ -105,10 +103,7 @@ export default async function handler(req, res) {
 
     // ── pull: fetch cloud data for this user ──────────────────────
     if (req.method === 'GET' && action === 'pull') {
-        const [statsRow, badgesRow] = await Promise.all([
-            sb.from('sv_user_stats').select('*').eq('username', username).single(),
-            sb.from('sv_user_badges').select('*').eq('username', username).single(),
-        ]);
+        const statsRow = await sb.from('sv_user_stats').select('*').eq('username', username).single();
 
         const stats = statsRow.data
             ? {
@@ -118,18 +113,13 @@ export default async function handler(req, res) {
                 labelPlays: statsRow.data.label_plays || {},
                 decadePlays: statsRow.data.decade_plays || {},
                 totalSessions: statsRow.data.total_sessions || 0,
-                totalPlaySeconds: statsRow.data.total_play_seconds || 0,
             }
             : null;
 
-        const badges = badgesRow.data
-            ? { earned: badgesRow.data.earned || [], seen: badgesRow.data.seen || [] }
-            : null;
-
-        return res.status(200).json({ stats, badges });
+        return res.status(200).json({ stats });
     }
 
-    // ── push: merge incoming stats + badges into cloud ────────────
+    // ── push: merge incoming stats into cloud ──────────────────────
     if (req.method === 'POST' && action === 'push') {
         let body;
         try {
@@ -139,7 +129,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Invalid JSON body' });
         }
 
-        const { stats: incoming, badges: incomingBadges } = body;
+        const { stats: incoming } = body;
 
         // Stats merge
         if (incoming?.sessions !== undefined) {
@@ -160,40 +150,12 @@ export default async function handler(req, res) {
                 label_plays: merged.labelPlays,
                 decade_plays: merged.decadePlays,
                 total_sessions: merged.totalSessions,
-                total_play_seconds: merged.totalPlaySeconds,
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'username' });
 
             if (upsertErr) {
                 console.error('[Sync] Stats upsert error:', upsertErr);
                 return res.status(500).json({ error: 'Failed to save stats' });
-            }
-        }
-
-        // Badges merge
-        if (incomingBadges) {
-            const existingBadgesRow = await sb
-                .from('sv_user_badges')
-                .select('earned, seen')
-                .eq('username', username)
-                .single();
-
-            const existingEarned = existingBadgesRow.data?.earned || [];
-            const existingSeen = existingBadgesRow.data?.seen || [];
-
-            const mergedEarned = [...new Set([...existingEarned, ...(incomingBadges.earned || [])])];
-            const mergedSeen   = [...new Set([...existingSeen,   ...(incomingBadges.seen   || [])])];
-
-            const { error: badgeErr } = await sb.from('sv_user_badges').upsert({
-                username,
-                earned: mergedEarned,
-                seen: mergedSeen,
-                updated_at: new Date().toISOString(),
-            }, { onConflict: 'username' });
-
-            if (badgeErr) {
-                console.error('[Sync] Badges upsert error:', badgeErr);
-                return res.status(500).json({ error: 'Failed to save badges' });
             }
         }
 

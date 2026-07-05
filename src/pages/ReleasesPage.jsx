@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X } from 'lucide-react';
-import { checkAndAwardBadges } from '../lib/badgeEngine.js';
-import { getStoredStats } from '../lib/statsEngine.js';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -32,8 +30,11 @@ const writeCache = (key, data) => {
 const clearCache = (key) => { try { localStorage.removeItem(key); } catch { } };
 
 // ─── Upcoming wantlist persistence ────────────────────────────────
-// Stores saved upcoming releases locally (keyed by `raw`). No Discogs lookup —
-// data comes entirely from upcomingvinyl.com so there are no wrong-version issues.
+// Stores saved upcoming releases locally (keyed by `raw`). Data comes from
+// upcomingvinyl.com, so there's no real Discogs release id until the record
+// is actually catalogued — WantlistSection periodically checks for a match
+// once the release date has passed and offers to move it into the real
+// Discogs wantlist (see the reconciliation effect there).
 
 const UPCOMING_WANTLIST_LS_KEY = 'spinvinyl_upcoming_wantlist';
 
@@ -743,7 +744,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     <div>
                         <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                             Artist Match
-                            <span className="ml-1 text-stone-600 normal-case font-normal">— violet badge</span>
+                            <span className="ml-1 text-stone-600 normal-case font-normal">— terracotta badge</span>
                         </p>
                         {customArtists.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-2">
@@ -816,7 +817,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     <div>
                         <p className="text-[10px] font-semibold text-stone-500 uppercase tracking-wider mb-1.5">
                             Genre Match
-                            <span className="ml-1 text-stone-600 normal-case font-normal">— pink badge</span>
+                            <span className="ml-1 text-stone-600 normal-case font-normal">— brass badge</span>
                         </p>
                         {customGenres.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-2">
@@ -1165,6 +1166,8 @@ const WantlistSection = () => {
     const [viewMode, setViewMode] = useState(() => localStorage.getItem('sv_wantlist_view') || 'grid');
     const [savedUpcoming, setSavedUpcoming] = useState(() => Object.values(loadUpcomingWantlist()));
     const [selectedUpcoming, setSelectedUpcoming] = useState(null);
+    const [reconcileMatches, setReconcileMatches] = useState({}); // { [raw]: { id, title } }
+    const [reconcileAddState, setReconcileAddState] = useState({}); // { [raw]: 'pending'|'error' }
 
     const changeViewMode = (mode) => {
         setViewMode(mode);
@@ -1176,6 +1179,70 @@ const WantlistSection = () => {
         delete current[raw];
         saveUpcomingWantlist(current);
         setSavedUpcoming(Object.values(current));
+    };
+
+    // ── Reconcile "saved from upcomingvinyl.com" entries against the real Discogs
+    // catalog once their release date has passed — the record may be catalogued
+    // now even though it wasn't when it was first saved.
+    useEffect(() => {
+        if (!savedUpcoming.length) return;
+        let cancelled = false;
+
+        const isEligible = (r) => {
+            if (!r.releaseDate) return true; // unparseable/missing — always eligible
+            const parsed = new Date(r.releaseDate);
+            if (isNaN(parsed)) return true;
+            if (parsed > new Date()) return false; // not out yet
+            const hoursSinceCheck = r._lastChecked ? (Date.now() - new Date(r._lastChecked)) / 3600000 : Infinity;
+            return hoursSinceCheck > 24;
+        };
+
+        const run = async () => {
+            const current = loadUpcomingWantlist();
+            for (const r of savedUpcoming) {
+                if (cancelled) break;
+                if (!isEligible(r)) continue;
+
+                const query = `${r.artist || ''} ${r.title || r.raw}`.trim();
+                try {
+                    const res = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(query)}`);
+                    const data = res.ok ? await res.json() : null;
+                    const top = data?.results?.[0];
+                    // Confidence check: the top result's title must contain the saved
+                    // title (edition-qualifiers stripped) — never trust a stale/wrong
+                    // discogsId that may already ride on this entry (often a master id,
+                    // captured before the record was even catalogued).
+                    if (top?.id) {
+                        const wantedTitle = normalizeTitle(r.title || r.raw);
+                        const gotTitle = normalizeTitle(top.title || '');
+                        if (wantedTitle && gotTitle.includes(wantedTitle)) {
+                            setReconcileMatches(prev => ({ ...prev, [r.raw]: { id: top.id, title: top.title } }));
+                        }
+                    }
+                } catch { /* ignore — will retry after the 24h cooldown */ }
+
+                if (current[r.raw]) current[r.raw] = { ...current[r.raw], _lastChecked: new Date().toISOString() };
+                await new Promise(res => setTimeout(res, 150));
+            }
+            if (!cancelled) saveUpcomingWantlist(current);
+        };
+        run();
+
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [savedUpcoming.length]);
+
+    const handleReconcileAdd = async (raw, match) => {
+        setReconcileAddState(prev => ({ ...prev, [raw]: 'pending' }));
+        try {
+            const res = await fetch(`/api/discogs?action=addToWantlist&id=${match.id}`, { method: 'POST' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            removeSavedUpcoming(raw);
+            setReconcileMatches(prev => { const n = { ...prev }; delete n[raw]; return n; });
+            fetchWantlist(true);
+        } catch {
+            setReconcileAddState(prev => ({ ...prev, [raw]: 'error' }));
+        }
     };
 
     const fetchWantlist = useCallback(async (force = false) => {
@@ -1299,6 +1366,15 @@ const WantlistSection = () => {
                                     <div className="p-3">
                                         <p className="text-xs font-bold text-white truncate leading-tight group-hover:text-terracotta-300 transition-colors">{r.artist}</p>
                                         <p className="text-[11px] text-stone-400 truncate mt-0.5">{r.title}</p>
+                                        {reconcileMatches[r.raw] && (
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleReconcileAdd(r.raw, reconcileMatches[r.raw]); }}
+                                                disabled={reconcileAddState[r.raw] === 'pending'}
+                                                className="mt-2 w-full text-[10px] font-bold px-2 py-1.5 rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                            >
+                                                {reconcileAddState[r.raw] === 'pending' ? 'Adding…' : 'Now available — Add'}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -1320,6 +1396,15 @@ const WantlistSection = () => {
                                         <p className="text-xs font-bold text-white truncate">{r.artist}</p>
                                         <p className="text-[11px] text-stone-400 truncate">{r.title}</p>
                                     </div>
+                                    {reconcileMatches[r.raw] && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); handleReconcileAdd(r.raw, reconcileMatches[r.raw]); }}
+                                            disabled={reconcileAddState[r.raw] === 'pending'}
+                                            className="flex-shrink-0 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                        >
+                                            {reconcileAddState[r.raw] === 'pending' ? 'Adding…' : 'Now available — Add'}
+                                        </button>
+                                    )}
                                     {r.releaseDate && (
                                         <span className="text-[10px] text-terracotta-400 font-semibold flex-shrink-0">{r.releaseDate}</span>
                                     )}
@@ -1768,10 +1853,6 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         setLoading(false);
 
         if (showCompleteRef.current) fetchExtraArtists(gapData);
-
-        if (gapData.some(g => g.pct === 100)) {
-            checkAndAwardBadges(getStoredStats(), { total: collectionArtists.length });
-        }
     }, [collectionArtists, fetchArtistGap, fetchExtraArtists]);
 
     const fetchRunRef = React.useRef(0);

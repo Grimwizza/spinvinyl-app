@@ -80,24 +80,8 @@ export const getMoodPicks = (releases, albumPlayCounts, slot, n = 5) => {
 
 /**
  * Single random pick from the collection.
- * Optionally excludes the currently-spinning album.
  */
-export const getRandomPick = (releases, excludeId = null) => {
-    const pool = excludeId != null ? releases.filter(r => r.id !== excludeId) : releases;
-    if (!pool.length) return releases[0] || null;
-    return pool[Math.floor(Math.random() * pool.length)];
-};
-
-/**
- * Master call — returns all recommendation lists.
- * @returns {{ gems: object[], mood: object[], slot: string, random: object|null }}
- */
-export const getRecommendations = (releases, albumPlayCounts, nowSpinningId = null) => {
-    const slot = getTimeSlot();
-    return {
-        gems:   getForgottenGems(releases, albumPlayCounts),
-        mood:   getMoodPicks(releases, albumPlayCounts, slot),
-        slot,
-        random: getRandomPick(releases, nowSpinningId),
-    };
+export const getRandomPick = (releases) => {
+    if (!releases.length) return null;
+    return releases[Math.floor(Math.random() * releases.length)];
 };

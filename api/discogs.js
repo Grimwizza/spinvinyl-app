@@ -309,7 +309,8 @@ export default async function handler(req, res) {
             break;
         }
         case 'searchRelease': {
-            // Search Discogs by query string — used for genre enrichment of upcoming releases
+            // Search Discogs by query string — used to reconcile saved "upcoming release"
+            // wantlist entries against the real catalog once they're actually released
             const q = url.searchParams.get('q') || req.query?.q || '';
             if (!q) return res.status(400).json({ error: 'Missing query' });
             apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(q)}&type=release&format=Vinyl&per_page=3`;
@@ -320,7 +321,20 @@ export default async function handler(req, res) {
             if (!matrixQ) return res.status(400).json({ error: 'Missing query parameter q' });
             const cleaned = matrixQ.trim().replace(/[^\w\s/-]/g, '').replace(/\s+/g, ' ').slice(0, 80);
             if (!cleaned) return res.status(400).json({ error: 'Query empty after cleaning' });
-            apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(cleaned)}&type=release&per_page=10&page=1`;
+            apiUrl = `${DISCOGS_BASE}/database/search?q=${encodeURIComponent(cleaned)}&type=release&format=Vinyl&per_page=10&page=1`;
+            break;
+        }
+        case 'priceSuggestions': {
+            // Discogs' suggested price by condition grade (Poor through Mint) for a release
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
+            apiUrl = `${DISCOGS_BASE}/marketplace/price_suggestions/${releaseId}`;
+            break;
+        }
+        case 'marketplaceStats': {
+            // Current lowest listed price + for-sale count for a release
+            if (!releaseId) return res.status(400).json({ error: 'Missing release id' });
+            const currAbbr = url.searchParams.get('curr_abbr') || req.query?.curr_abbr || 'USD';
+            apiUrl = `${DISCOGS_BASE}/marketplace/stats/${releaseId}?curr_abbr=${encodeURIComponent(currAbbr)}`;
             break;
         }
         case 'addToWantlist': {

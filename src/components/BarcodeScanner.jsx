@@ -149,6 +149,28 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         }
     }, []);
 
+    // Matrix/runout etching search — for identifying a specific pressing
+    const searchByMatrix = useCallback(async (query) => {
+        stopCamera();
+        setPhase('searching');
+        setLastQuery(query);
+        setErrorMsg('');
+
+        try {
+            const res  = await fetch(`/api/discogs?action=matrixSearch&q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (!isMountedRef.current) return;
+            if (!res.ok) throw new Error(data.error || 'Search failed');
+            const items = data.results || [];
+            setResults(items);
+            setPhase(items.length > 0 ? 'results' : 'empty');
+        } catch (e) {
+            if (!isMountedRef.current) return;
+            setErrorMsg(e.message);
+            setPhase('error');
+        }
+    }, []);
+
     // ── Live scanning via @zxing/browser ─────────────────────────────────────
     // Dynamic import keeps ZXing (~500 KB) out of the initial app bundle.
     // ZXing owns the video element's stream — no separate getUserMedia or video.play() needed.
@@ -227,10 +249,11 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         e.preventDefault();
         const q = searchQuery.trim();
         if (!q) return;
-        searchByText(q);
+        if (mode === 'matrix') searchByMatrix(q);
+        else searchByText(q);
     };
 
-    // Switch to the live-scanning camera view (from Search mode, or to resume after an add)
+    // Switch to the live-scanning camera view (from Search/Matrix mode, or to resume after an add)
     const handleShowScan = () => {
         setMode('scan');
         setSearchQuery('');
@@ -241,6 +264,15 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const handleShowSearch = () => {
         stopCamera();
         setMode('search');
+        setPhase('searchInput');
+        setErrorMsg('');
+        setResults([]);
+    };
+
+    // Switch to the matrix/runout etching search view (stops the camera)
+    const handleShowMatrix = () => {
+        stopCamera();
+        setMode('matrix');
         setPhase('searchInput');
         setErrorMsg('');
         setResults([]);
@@ -271,11 +303,10 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     };
 
     const handleItemSaved = (release) => {
-        saveUpcLocally(
-            mode === 'scan' ? barcode : null,
-            release,
-            mode === 'search' ? { search_query: lastQuery } : {}
-        );
+        const provenance = mode === 'search' ? { search_query: lastQuery }
+            : mode === 'matrix' ? { matrix_query: lastQuery }
+            : {};
+        saveUpcLocally(mode === 'scan' ? barcode : null, release, provenance);
         setAdded(prev => ({ ...prev, [release.id]: true }));
         clearCollectionCache?.();
         onAddSuccess?.(release.title);
@@ -285,6 +316,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         setLastAdded(release.title);
         setTimeout(() => setLastAdded(null), 1800);
         if (mode === 'search') handleShowSearch();
+        else if (mode === 'matrix') handleShowMatrix();
         else handleShowScan();
     };
 
@@ -340,6 +372,12 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                             className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${mode === 'search' ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30' : 'text-stone-500 border border-transparent'}`}
                         >
                             Search
+                        </button>
+                        <button
+                            onClick={handleShowMatrix}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-full transition-colors ${mode === 'matrix' ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30' : 'text-stone-500 border border-transparent'}`}
+                        >
+                            Matrix
                         </button>
                     </div>
                 </div>
@@ -417,12 +455,16 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             {isSearchInput && (
                 <div className="flex-1 flex flex-col items-center justify-center px-6 bg-black">
                     <form onSubmit={handleSearchSubmit} className="w-full max-w-sm flex flex-col gap-3">
-                        <p className="text-stone-400 text-sm text-center mb-2">Search by artist or album title — useful for records with no barcode</p>
+                        <p className="text-stone-400 text-sm text-center mb-2">
+                            {mode === 'matrix'
+                                ? 'Search by matrix/runout etching — identifies the exact pressing, stamped in the vinyl near the label'
+                                : 'Search by artist or album title — useful for records with no barcode'}
+                        </p>
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="e.g. Fleetwood Mac Rumours"
+                            placeholder={mode === 'matrix' ? 'e.g. ST-746 A-1' : 'e.g. Fleetwood Mac Rumours'}
                             autoFocus
                             className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder-stone-600 focus:outline-none focus:border-terracotta-500/50 transition-colors"
                         />
@@ -455,10 +497,10 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                             </p>
                         </div>
                         <button
-                            onClick={mode === 'search' ? handleShowSearch : handleRescan}
+                            onClick={mode === 'search' ? handleShowSearch : mode === 'matrix' ? handleShowMatrix : handleRescan}
                             className="text-xs text-terracotta-400 font-bold px-3 py-2 min-h-[44px] min-w-[70px] rounded-xl bg-terracotta-500/10 border border-terracotta-500/20 active:opacity-70 flex-shrink-0"
                         >
-                            {mode === 'search' ? 'Search Again' : 'Rescan'}
+                            {mode === 'search' || mode === 'matrix' ? 'Search Again' : 'Rescan'}
                         </button>
                     </div>
                 )}
@@ -560,8 +602,8 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         </div>
                     )}
 
-                    {/* Empty / Error — search mode: let the user try a different query */}
-                    {(phase === 'empty' || phase === 'error') && mode === 'search' && (
+                    {/* Empty / Error — search/matrix mode: let the user try a different query */}
+                    {(phase === 'empty' || phase === 'error') && (mode === 'search' || mode === 'matrix') && (
                         <div className="px-4 pt-4 pb-6">
                             <p className="text-xs text-stone-500 text-center">Try a different search, or switch to Scan to use the camera.</p>
                         </div>

@@ -57,13 +57,13 @@ const RecommendCard = ({ release, playCount, onSpin }) => {
 };
 
 // ─── Main Widget ─────────────────────────────────────────────────
-export default function RecommendWidget({ releases, albumPlayCounts, nowSpinningId, onSpinThis }) {
+export default function RecommendWidget({ releases, albumPlayCounts, onSpinThis }) {
     const [tab, setTab] = useState(() => {
         const saved = localStorage.getItem(PREF_KEY);
         return TABS.includes(saved) ? saved : 'gems';
     });
     const [randomPick, setRandomPick] = useState(() =>
-        getRandomPick(releases, nowSpinningId)
+        getRandomPick(releases)
     );
 
     const slot = useMemo(() => getTimeSlot(), []);
@@ -84,8 +84,8 @@ export default function RecommendWidget({ releases, albumPlayCounts, nowSpinning
     }, []);
 
     const handleShuffle = useCallback(() => {
-        setRandomPick(getRandomPick(releases, nowSpinningId));
-    }, [releases, nowSpinningId]);
+        setRandomPick(getRandomPick(releases));
+    }, [releases]);
 
     if (!releases.length) return null;
 

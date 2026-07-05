@@ -34,43 +34,21 @@ const enqueue = (item) => {
 
 const clearQueue = () => localStorage.removeItem(SYNC_QUEUE_KEY);
 
-// ─── Badge State Helpers ─────────────────────────────────────────
-
-const BADGE_KEY = 'spinvinyl_badges';
-
-const getBadgeState = () => {
-    try {
-        const raw = localStorage.getItem(BADGE_KEY);
-        return raw ? JSON.parse(raw) : { earned: [], seen: [] };
-    } catch {
-        return { earned: [], seen: [] };
-    }
-};
-
-const saveBadgeState = (state) => {
-    try {
-        localStorage.setItem(BADGE_KEY, JSON.stringify(state));
-    } catch (e) {
-        console.error('[SyncEngine] Failed to save badges:', e);
-    }
-};
-
 // ─── Core Sync Operations ────────────────────────────────────────
 
 /**
- * Push current localStorage stats + badges to /api/sync.
+ * Push current localStorage stats to /api/sync.
  * Resolves true on success, false on network/auth error.
  */
 export const pushToCloud = async (username) => {
     if (!username) return false;
     try {
-        const stats  = getStoredStats();
-        const badges = getBadgeState();
+        const stats = getStoredStats();
         const res = await fetch('/api/sync?action=push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ stats, badges }),
+            body: JSON.stringify({ stats }),
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -87,7 +65,7 @@ export const pushToCloud = async (username) => {
 };
 
 /**
- * Pull cloud stats + badges and merge them into localStorage.
+ * Pull cloud stats and merge them into localStorage.
  * Returns true if a merge occurred (caller may want to refresh UI state).
  */
 export const pullFromCloud = async (username) => {
@@ -101,39 +79,26 @@ export const pullFromCloud = async (username) => {
             console.warn('[SyncEngine] Pull failed:', res.status);
             return false;
         }
-        const { stats: cloud, badges: cloudBadges } = await res.json();
-        if (!cloud && !cloudBadges) return false;
+        const { stats: cloud } = await res.json();
+        if (!cloud) return false;
 
         let merged = false;
 
         // Merge stats
-        if (cloud) {
-            const local = getStoredStats();
-            const localIds  = new Set(local.sessions.map(s => s.id));
-            const cloudIds  = new Set((cloud.sessions || []).map(s => s.id));
-            const hasNew    = [...cloudIds].some(id => !localIds.has(id));
+        const local = getStoredStats();
+        const localIds  = new Set(local.sessions.map(s => s.id));
+        const cloudIds  = new Set((cloud.sessions || []).map(s => s.id));
+        const hasNew    = [...cloudIds].some(id => !localIds.has(id));
 
-            if (hasNew) {
-                const idMap = new Map();
-                for (const s of local.sessions)          idMap.set(s.id, s);
-                for (const s of (cloud.sessions || []))  idMap.set(s.id, s);
-                const unionSessions = [...idMap.values()].sort(
-                    (a, b) => (a.startTime || '') < (b.startTime || '') ? -1 : 1
-                );
-                saveStats(recomputeFromSessions(unionSessions));
-                merged = true;
-            }
-        }
-
-        // Merge badges
-        if (cloudBadges) {
-            const local = getBadgeState();
-            const mergedEarned = [...new Set([...local.earned, ...(cloudBadges.earned || [])])];
-            const mergedSeen   = [...new Set([...local.seen,   ...(cloudBadges.seen   || [])])];
-            if (mergedEarned.length !== local.earned.length || mergedSeen.length !== local.seen.length) {
-                saveBadgeState({ earned: mergedEarned, seen: mergedSeen });
-                merged = true;
-            }
+        if (hasNew) {
+            const idMap = new Map();
+            for (const s of local.sessions)          idMap.set(s.id, s);
+            for (const s of (cloud.sessions || []))  idMap.set(s.id, s);
+            const unionSessions = [...idMap.values()].sort(
+                (a, b) => (a.startTime || '') < (b.startTime || '') ? -1 : 1
+            );
+            saveStats(recomputeFromSessions(unionSessions));
+            merged = true;
         }
 
         if (merged) localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());

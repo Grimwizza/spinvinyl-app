@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
-import { BarChart2, CheckCircle, Clock, Disc3, Music2, TrendingUp } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { BarChart2, CheckCircle, Clock, Disc3, DollarSign, Music2, RefreshCw, TrendingUp } from 'lucide-react';
 import {
-    getPeriodTotalSeconds, getTopAlbums, getGenreBreakdown,
-    getDayMap, getUniqueAlbumsSpun, getStoredStats, formatDuration, getCurrentStreak,
+    getPeriodSpinCount, getTopAlbums, getGenreBreakdown,
+    getDayMap, getUniqueAlbumsSpun, getStoredStats, getCurrentStreak,
 } from '../lib/statsEngine.js';
+import { readPriceCache, fetchReleasePrice } from '../lib/priceCache.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -49,7 +50,7 @@ const ListeningCalendar = ({ dayMap }) => {
     const today = toDateStr(new Date());
 
     // Compute max for intensity scaling
-    const maxSeconds = Math.max(1, ...Object.values(dayMap));
+    const maxCount = Math.max(1, ...Object.values(dayMap));
 
     // Group into weeks (columns of 7)
     const weeks = [];
@@ -70,7 +71,7 @@ const ListeningCalendar = ({ dayMap }) => {
 
     const getCellColor = (day) => {
         if (!dayMap[day]) return 'bg-white/5';
-        const ratio = dayMap[day] / maxSeconds;
+        const ratio = dayMap[day] / maxCount;
         if (ratio < 0.2) return 'bg-terracotta-900/50';
         if (ratio < 0.4) return 'bg-terracotta-700/70';
         if (ratio < 0.7) return 'bg-terracotta-500/80';
@@ -117,11 +118,11 @@ const ListeningCalendar = ({ dayMap }) => {
                             <div key={wi} className="flex flex-col" style={{ gap: '2px' }}>
                                 {week.map((day, di) => {
                                     const isToday = day === today;
-                                    const secs = dayMap[day] || 0;
+                                    const count = dayMap[day] || 0;
                                     return (
                                         <div
                                             key={di}
-                                            title={secs > 0 ? `${day}: ${formatDuration(secs)}` : day}
+                                            title={count > 0 ? `${day}: ${count} spin${count !== 1 ? 's' : ''}` : day}
                                             className={`rounded-sm transition-all ${getCellColor(day)} ${isToday ? 'ring-1 ring-terracotta-400' : ''}`}
                                             style={{ width: 14, height: 14, flexShrink: 0 }}
                                         />
@@ -223,11 +224,131 @@ const CollectionProgress = ({ spunCount, totalCount }) => {
     );
 };
 
+// ─── Collection Value ──────────────────────────────────────────────
+// Estimates total collection value from Discogs marketplace price data. Each
+// release's price is cached individually (src/lib/priceCache.js, 4h TTL —
+// safely under Discogs' 6h Content-freshness rule). This card's own summary
+// re-computation cadence is separate: it's a long-lived rollup over whatever
+// mix of fresh/stale per-release entries currently exist, not itself subject
+// to that 6h rule.
+
+const VALUE_SUMMARY_KEY = 'spinvinyl_collection_value_summary';
+const VALUE_LAST_RUN_KEY = 'spinvinyl_collection_value_last_run';
+const VALUE_RUN_COOLDOWN_HOURS = 24;
+const VALUE_FETCH_DELAY_MS = 1100; // ~55 req/min — safely under Discogs' ~60 req/min budget
+
+const readValueSummary = () => {
+    try {
+        const raw = localStorage.getItem(VALUE_SUMMARY_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+};
+
+const writeValueSummary = (summary) => {
+    try { localStorage.setItem(VALUE_SUMMARY_KEY, JSON.stringify(summary)); } catch { }
+};
+
+/** Recompute the summary from whatever per-release price caches currently exist. */
+const computeValueSummary = (releases) => {
+    let total = 0, priced = 0, currency = 'USD';
+    for (const r of releases) {
+        const cached = readPriceCache(r.id);
+        if (!cached) continue;
+        const ownedCondition = r.notes?.find(f => f.field_id === 1)?.value;
+        const priceObj = (ownedCondition && cached.suggestions?.[ownedCondition]) || cached.stats?.lowest_price;
+        const value = Number(priceObj?.value);
+        if (value > 0) {
+            total += value;
+            currency = priceObj.currency || currency;
+            priced += 1;
+        }
+    }
+    return { totalValue: total, pricedCount: priced, totalCount: releases.length, currency, updatedAt: new Date().toISOString() };
+};
+
+const CollectionValueCard = ({ releases }) => {
+    const [summary, setSummary] = useState(() => readValueSummary());
+    const [running, setRunning] = useState(false);
+    const cancelledRef = useRef(false);
+    const runningRef = useRef(false);
+
+    const runBatch = async () => {
+        if (runningRef.current || !releases?.length) return;
+        runningRef.current = true;
+        cancelledRef.current = false;
+        setRunning(true);
+        for (const r of releases) {
+            if (cancelledRef.current) break;
+            if (!readPriceCache(r.id)) {
+                await fetchReleasePrice(r.id);
+                if (cancelledRef.current) break;
+                const next = computeValueSummary(releases);
+                writeValueSummary(next);
+                setSummary(next);
+                await new Promise(res => setTimeout(res, VALUE_FETCH_DELAY_MS));
+            }
+        }
+        if (!cancelledRef.current) {
+            localStorage.setItem(VALUE_LAST_RUN_KEY, new Date().toISOString());
+        }
+        runningRef.current = false;
+        setRunning(false);
+    };
+
+    useEffect(() => {
+        if (!releases?.length) return;
+        cancelledRef.current = false;
+
+        const lastRun = localStorage.getItem(VALUE_LAST_RUN_KEY);
+        const hoursSinceRun = lastRun ? (Date.now() - new Date(lastRun)) / 3600000 : Infinity;
+        if (hoursSinceRun > VALUE_RUN_COOLDOWN_HOURS) runBatch();
+
+        return () => { cancelledRef.current = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [releases?.length]);
+
+    if (!releases?.length) return null;
+
+    return (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="flex justify-between items-start mb-3">
+                <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                        <DollarSign size={14} className="text-brass-400" /> Collection Value
+                    </h3>
+                    {summary && (
+                        <p className="text-xs text-stone-500 mt-0.5">
+                            as of {new Date(summary.updatedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · {summary.pricedCount} of {summary.totalCount} priced
+                        </p>
+                    )}
+                </div>
+                <button
+                    onClick={runBatch}
+                    disabled={running}
+                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-stone-400 hover:text-white transition-colors disabled:opacity-50 flex-shrink-0"
+                    title="Refresh collection value"
+                >
+                    <RefreshCw size={14} className={running ? 'animate-spin' : ''} />
+                </button>
+            </div>
+            {summary && summary.pricedCount > 0 ? (
+                <p className="text-2xl sm:text-3xl font-black text-terracotta-400">
+                    ~{summary.currency} {summary.totalValue.toFixed(2)}
+                </p>
+            ) : (
+                <p className="text-sm text-stone-500">
+                    {running ? 'Estimating value from Discogs marketplace data…' : "Tap refresh to estimate your collection's value."}
+                </p>
+            )}
+        </div>
+    );
+};
+
 // ─── Completed Collections ────────────────────────────────────────
 
 const getCompletedArtists = () => {
     try {
-        const raw = localStorage.getItem('spinvinyl_gaps_cache');
+        const raw = localStorage.getItem('spinvinyl_gaps_cache_v4');
         if (!raw) return [];
         const { data } = JSON.parse(raw);
         return (data || []).filter(g => g.pct === 100).map(g => g.artist);
@@ -265,11 +386,11 @@ const CompletedCollections = () => {
 
 // ─── Main Stats Page ──────────────────────────────────────────────
 
-const StatsPage = ({ collectionCount }) => {
-    const todaySec = useMemo(() => getPeriodTotalSeconds('today'), []);
-    const weekSec = useMemo(() => getPeriodTotalSeconds('week'), []);
-    const monthSec = useMemo(() => getPeriodTotalSeconds('month'), []);
-    const allSec = useMemo(() => getPeriodTotalSeconds('all'), []);
+const StatsPage = ({ collectionCount, releases }) => {
+    const todayCount = useMemo(() => getPeriodSpinCount('today'), []);
+    const weekCount = useMemo(() => getPeriodSpinCount('week'), []);
+    const monthCount = useMemo(() => getPeriodSpinCount('month'), []);
+    const allCount = useMemo(() => getPeriodSpinCount('all'), []);
     const topAlbums = useMemo(() => getTopAlbums(5), []);
     const genres = useMemo(() => getGenreBreakdown(), []);
     const dayMap = useMemo(() => getDayMap(), []);
@@ -295,7 +416,7 @@ const StatsPage = ({ collectionCount }) => {
                     </div>
                     <p className="text-stone-500 text-sm">
                         {hasAnyData
-                            ? `${stats.totalSessions} total session${stats.totalSessions !== 1 ? 's' : ''} · ${formatDuration(stats.totalPlaySeconds)} of music`
+                            ? `${stats.totalSessions} total spin${stats.totalSessions !== 1 ? 's' : ''} logged`
                             : 'Start spinning records to see your stats!'}
                     </p>
                     {streak > 0 && (
@@ -309,10 +430,10 @@ const StatsPage = ({ collectionCount }) => {
             <div className="max-w-3xl mx-auto px-4 space-y-5">
                 {/* Time Cards — 2×2 grid */}
                 <div className="grid grid-cols-2 gap-3">
-                    <StatCard label="Today" value={formatDuration(todaySec)} icon={Clock} accent="text-terracotta-400" />
-                    <StatCard label="This Week" value={formatDuration(weekSec)} icon={TrendingUp} accent="text-brass-400" />
-                    <StatCard label="This Month" value={formatDuration(monthSec)} icon={Music2} accent="text-blue-400" />
-                    <StatCard label="All Time" value={formatDuration(allSec)} icon={Disc3} accent="text-amber-400" />
+                    <StatCard label="Today" value={`${todayCount}×`} icon={Clock} accent="text-terracotta-400" />
+                    <StatCard label="This Week" value={`${weekCount}×`} icon={TrendingUp} accent="text-brass-400" />
+                    <StatCard label="This Month" value={`${monthCount}×`} icon={Music2} accent="text-blue-400" />
+                    <StatCard label="All Time" value={`${allCount}×`} icon={Disc3} accent="text-amber-400" />
                 </div>
 
                 {/* Listening Calendar */}
@@ -326,6 +447,9 @@ const StatsPage = ({ collectionCount }) => {
 
                 {/* Collection Progress */}
                 <CollectionProgress spunCount={spunCount} totalCount={collectionCount || 0} />
+
+                {/* Collection Value */}
+                <CollectionValueCard releases={releases} />
 
                 {/* Completed Artist Collections */}
                 <CompletedCollections />
