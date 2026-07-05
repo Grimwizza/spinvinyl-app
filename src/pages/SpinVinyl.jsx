@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, CheckCircle, Barcode, Lock} from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Volume2, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Play, Pause, SkipForward, Clock, Shuffle, Star, Share, MoreVertical, Download, Info, Trophy, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { checkAndAwardBadges } from '../lib/badgeEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
@@ -10,6 +10,8 @@ import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
 import RecommendWidget from '../components/RecommendWidget.jsx';
 import CrateView from '../components/CrateView.jsx';
+import AlphaNav, { SectionDivider, groupByLetter, isAlphaSort } from '../components/AlphaNav.jsx';
+import CollectionItemEditor from '../components/CollectionItemEditor.jsx';
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -386,10 +388,11 @@ const AlbumArt = ({ release, alt, className, fallbackSize = 40, fallbackGradient
 };
 
 // ─── Album Detail Modal ─────────────────────────────────────────
-const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
+const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, collectionFields, onItemEdited }) => {
     const [detail, setDetail] = useState(null);
     const [artistInfo, setArtistInfo] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [editing, setEditing] = useState(false);
 
     // Lock body scroll while modal is open (iOS + Android)
     useEffect(() => {
@@ -524,6 +527,32 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                 className="relative w-full h-full sm:h-auto sm:max-w-lg sm:max-h-[90vh] bg-gray-900 sm:border sm:border-white/10 sm:rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
+              {editing ? (
+                <CollectionItemEditor
+                    release={{
+                        id: release.id,
+                        title: info.title,
+                        thumb: info.thumb || info.cover_image,
+                        year: info.year,
+                        format: (info.formats || []).map(f => f.name),
+                    }}
+                    mode="edit"
+                    instanceId={release.instance_id}
+                    initialValues={{
+                        folderId: String(release.folder_id ?? '1'),
+                        rating: release.rating || 0,
+                        fields: release.notes || [],
+                    }}
+                    folders={folders}
+                    collectionFields={collectionFields}
+                    onCancel={() => setEditing(false)}
+                    onSaved={(updatedRelease, payload) => {
+                        setEditing(false);
+                        onItemEdited?.(release.instance_id, payload);
+                    }}
+                />
+              ) : (
+                <>
                 {/* Header with album art */}
                 <div className="relative flex-shrink-0" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
                     {/* Background blur */}
@@ -531,6 +560,11 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                         <AlbumArt release={release} alt="" className="w-full h-full object-cover scale-110 blur-2xl opacity-30" />
                         <div className="absolute inset-0 bg-gradient-to-b from-gray-900/50 to-gray-900" />
                     </div>
+
+                    {/* Edit collection details */}
+                    <button onClick={() => setEditing(true)} aria-label="Edit collection details" className="absolute right-14 z-10 p-3 rounded-full bg-black/30 hover:bg-black/50 transition-colors" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
+                        <Pencil size={18} className="text-white" />
+                    </button>
 
                     {/* Close — larger tap target on mobile */}
                     <button onClick={onClose} className="absolute right-3 z-10 p-3 rounded-full bg-black/30 hover:bg-black/50 transition-colors" style={{ top: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
@@ -793,6 +827,8 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch }) => {
                         </div>
                     )}
                 </div>
+                </>
+              )}
             </div>
         </div>
     );
@@ -1351,7 +1387,8 @@ export const SpinVinyl = () => {
     // ─── Gamification State ──────────────────────────────────────
     const [activePage, setActivePage] = useState('collection'); // 'collection' | 'achievements' | 'stats'
     const [showScanner, setShowScanner] = useState(false);
-    const [scanToast, setScanToast] = useState(null); // { title } for 3s
+    const [collectionFolders, setCollectionFolders] = useState([]);
+    const [collectionFields, setCollectionFields] = useState(null);
     const [pendingBadges, setPendingBadges] = useState([]); // queue of badge objects to toast
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
 
@@ -1528,6 +1565,20 @@ export const SpinVinyl = () => {
         setSelectedAlbum(release);
     };
 
+    // ─── Collection item edited from the detail modal ────────────
+    // Patches the in-memory releases list (matched by instance_id) so the change is
+    // reflected immediately without waiting for the next full collection refetch.
+    const handleItemEdited = (instanceId, payload) => {
+        const patch = {
+            folder_id: Number(payload.folderId),
+            rating: payload.rating ?? 0,
+            notes: payload.fields,
+        };
+        setReleases(prev => prev.map(r => r.instance_id === instanceId ? { ...r, ...patch } : r));
+        setSelectedAlbum(prev => prev && prev.instance_id === instanceId ? { ...prev, ...patch } : prev);
+        clearCollectionCache();
+    };
+
     // ─── "Spin This" from modal ─────────────────────────────────
     const handleSpin = (release, detail) => {
         const info = release.basic_information || {};
@@ -1554,6 +1605,19 @@ export const SpinVinyl = () => {
         setSpinningTrackData(null);
         localStorage.removeItem('nowSpinning');
     };
+
+    // ─── Fetch folders + collection field definitions once (used by the album edit form) ─
+    useEffect(() => {
+        if (!authUsername) return;
+        fetch('/api/discogs?action=getFolders')
+            .then(res => res.json())
+            .then(data => { if (data.folders) setCollectionFolders(data.folders); })
+            .catch(e => console.error('[SpinVinyl] Failed to fetch folders:', e));
+        fetch('/api/discogs?action=getCollectionFields')
+            .then(res => res.json())
+            .then(data => { if (data.fields) setCollectionFields(data); })
+            .catch(e => console.error('[SpinVinyl] Failed to fetch collection fields:', e));
+    }, [authUsername]);
 
     // ─── Flush offline sync queue when connection is restored ─────
     useEffect(() => {
@@ -1614,6 +1678,33 @@ export const SpinVinyl = () => {
         });
         return result;
     }, [releases, searchQuery, sortBy]);
+
+    // ─── Alpha Nav: derive current sort field & letter groups ────
+    const currentSortField = useMemo(() => {
+        const opt = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
+        return opt.field;
+    }, [sortBy]);
+
+    const currentSortOrder = useMemo(() => {
+        const opt = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
+        return opt.order;
+    }, [sortBy]);
+
+    const groupedByLetter = useMemo(
+        () => groupByLetter(filteredAndSorted, currentSortField),
+        [filteredAndSorted, currentSortField]
+    );
+
+    const [crateJumpIndex, setCrateJumpIndex] = useState(null);
+
+    const handleJumpToLetter = useCallback((letter) => {
+        const el = document.getElementById(`section-${letter}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
+    const handleJumpToCrateIndex = useCallback((index) => {
+        setCrateJumpIndex(index);
+    }, []);
 
     const handleSortChange = (option) => {
         setSortBy(option.value);
@@ -1872,115 +1963,234 @@ export const SpinVinyl = () => {
 
                     {/* GRID View */}
                     {!loading && !error && viewMode === 'grid' && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4 md:gap-6">
-                            {filteredAndSorted.map((release) => {
-                                const info = release.basic_information || {};
-                                const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
-                                const isSpinning = nowSpinning?.id === release.id;
-                                return (
-                                    <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                        className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/60 active:scale-95 active:opacity-80 ${isSpinning ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
-                                        <div className="aspect-square relative overflow-hidden bg-gray-800">
-                                            <AlbumArt release={release} alt={`${cleanName(info.title)} by ${artist}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" fallbackSize={40} />
-                                            <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSpinning ? 'bg-violet-900/40' : 'bg-black/0 group-hover:bg-black/50'}`}>
-                                                {isSpinning ? (
-                                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/90 text-white text-xs font-bold">
-                                                        <Volume2 size={14} className="animate-pulse" /> NOW SPINNING
-                                                    </div>
-                                                ) : (
-                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
-                                                        <Music2 size={14} /> VIEW ALBUM
-                                                    </div>
-                                                )}
-                                            </div>
+                        <div className="pr-8 sm:pr-10">
+                            {groupedByLetter ? (
+                                groupedByLetter.map(({ letter, items: groupItems }) => (
+                                    <div key={letter}>
+                                        <SectionDivider letter={letter} count={groupItems.length} />
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4 md:gap-6 mb-4">
+                                            {groupItems.map((release) => {
+                                                const info = release.basic_information || {};
+                                                const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
+                                                const isSpinning = nowSpinning?.id === release.id;
+                                                return (
+                                                    <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
+                                                        className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/60 active:scale-95 active:opacity-80 ${isSpinning ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
+                                                        <div className="aspect-square relative overflow-hidden bg-gray-800">
+                                                            <AlbumArt release={release} alt={`${cleanName(info.title)} by ${artist}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" fallbackSize={40} />
+                                                            <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSpinning ? 'bg-violet-900/40' : 'bg-black/0 group-hover:bg-black/50'}`}>
+                                                                {isSpinning ? (
+                                                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/90 text-white text-xs font-bold">
+                                                                        <Volume2 size={14} className="animate-pulse" /> NOW SPINNING
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
+                                                                        <Music2 size={14} /> VIEW ALBUM
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="p-3 bg-white/[0.03]">
+                                                            <p className="text-sm font-semibold text-white truncate leading-tight" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                                                            <p
+                                                                className="text-xs text-gray-400 truncate mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSearchQuery(artist);
+                                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                                }}
+                                                                title={`Search collection for ${artist}`}
+                                                            >
+                                                                {artist || 'Unknown'}
+                                                            </p>
+                                                            <div className="flex items-center gap-2 mt-1.5 relative z-10">
+                                                                {info.year > 0 && <span className="text-xs sm:text-[10px] text-gray-500 font-medium">{info.year}</span>}
+                                                                {info.formats?.[0]?.name && <span className="text-xs sm:text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-medium">{info.formats[0].name}</span>}
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
-                                        <div className="p-3 bg-white/[0.03]">
-                                            <p className="text-sm font-semibold text-white truncate leading-tight" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
-                                            <p
-                                                className="text-xs text-gray-400 truncate mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSearchQuery(artist);
-                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                }}
-                                                title={`Search collection for ${artist}`}
-                                            >
-                                                {artist || 'Unknown'}
-                                            </p>
-                                            <div className="flex items-center gap-2 mt-1.5 relative z-10">
-                                                {info.year > 0 && <span className="text-xs sm:text-[10px] text-gray-500 font-medium">{info.year}</span>}
-                                                {info.formats?.[0]?.name && <span className="text-xs sm:text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-medium">{info.formats[0].name}</span>}
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-4 md:gap-6">
+                                    {filteredAndSorted.map((release) => {
+                                        const info = release.basic_information || {};
+                                        const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
+                                        const isSpinning = nowSpinning?.id === release.id;
+                                        return (
+                                            <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
+                                                className={`group text-left rounded-xl overflow-hidden transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-violet-500/60 active:scale-95 active:opacity-80 ${isSpinning ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20 scale-[1.02]' : 'hover:scale-[1.03] hover:shadow-xl hover:shadow-black/40'}`}>
+                                                <div className="aspect-square relative overflow-hidden bg-gray-800">
+                                                    <AlbumArt release={release} alt={`${cleanName(info.title)} by ${artist}`} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" fallbackSize={40} />
+                                                    <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${isSpinning ? 'bg-violet-900/40' : 'bg-black/0 group-hover:bg-black/50'}`}>
+                                                        {isSpinning ? (
+                                                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/90 text-white text-xs font-bold">
+                                                                <Volume2 size={14} className="animate-pulse" /> NOW SPINNING
+                                                            </div>
+                                                        ) : (
+                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
+                                                                <Music2 size={14} /> VIEW ALBUM
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="p-3 bg-white/[0.03]">
+                                                    <p className="text-sm font-semibold text-white truncate leading-tight" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                                                    <p
+                                                        className="text-xs text-gray-400 truncate mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSearchQuery(artist);
+                                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                        }}
+                                                        title={`Search collection for ${artist}`}
+                                                    >
+                                                        {artist || 'Unknown'}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-1.5 relative z-10">
+                                                        {info.year > 0 && <span className="text-xs sm:text-[10px] text-gray-500 font-medium">{info.year}</span>}
+                                                        {info.formats?.[0]?.name && <span className="text-xs sm:text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-medium">{info.formats[0].name}</span>}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {/* LIST View */}
                     {!loading && !error && viewMode === 'list' && (
-                        <>
+                        <div className="pr-8 sm:pr-10">
                             <div className="hidden sm:grid grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-4 px-4 py-2 text-[11px] uppercase tracking-wider font-semibold text-gray-500 border-b border-white/5 mb-1">
                                 <div className="w-12" /><div>Title</div><div>Artist</div><div>Year</div><div>Label</div><div className="text-right">Format</div>
                             </div>
-                            <div className="divide-y divide-white/5">
-                                {filteredAndSorted.map((release) => {
-                                    const info = release.basic_information || {};
-                                    const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
-                                    const isSpinning = nowSpinning?.id === release.id;
-                                    return (
-                                        <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
-                                            className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] ${isSpinning ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
-                                            <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-800 flex-shrink-0 relative">
-                                                <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
-                                                {isSpinning && <div className="absolute inset-0 bg-violet-500/30 flex items-center justify-center"><Volume2 size={12} className="text-white animate-pulse" /></div>}
-                                            </div>
-                                            <div className="min-w-0 sm:contents">
-                                                <div className="min-w-0">
-                                                    <p className={`text-sm font-medium truncate ${isSpinning ? 'text-violet-300' : 'text-white group-hover:text-violet-300'} transition-colors`} title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                            {groupedByLetter ? (
+                                groupedByLetter.map(({ letter, items: groupItems }) => (
+                                    <div key={letter}>
+                                        <SectionDivider letter={letter} count={groupItems.length} />
+                                        <div className="divide-y divide-white/5">
+                                            {groupItems.map((release) => {
+                                                const info = release.basic_information || {};
+                                                const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
+                                                const isSpinning = nowSpinning?.id === release.id;
+                                                return (
+                                                    <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
+                                                        className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] ${isSpinning ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
+                                                        <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-800 flex-shrink-0 relative">
+                                                            <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
+                                                            {isSpinning && <div className="absolute inset-0 bg-violet-500/30 flex items-center justify-center"><Volume2 size={12} className="text-white animate-pulse" /></div>}
+                                                        </div>
+                                                        <div className="min-w-0 sm:contents">
+                                                            <div className="min-w-0">
+                                                                <p className={`text-sm font-medium truncate ${isSpinning ? 'text-violet-300' : 'text-white group-hover:text-violet-300'} transition-colors`} title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                                                                <p
+                                                                    className="text-sm sm:text-xs text-gray-500 truncate sm:hidden mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSearchQuery(artist);
+                                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                                    }}
+                                                                >
+                                                                    {artist} {info.year > 0 ? `· ${info.year}` : ''}
+                                                                </p>
+                                                            </div>
+                                                            <p
+                                                                className="hidden sm:block text-sm text-gray-400 truncate hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSearchQuery(artist);
+                                                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                                }}
+                                                            >
+                                                                {artist || 'Unknown'}
+                                                            </p>
+                                                            <p className="hidden sm:block text-sm text-gray-500 tabular-nums">{info.year > 0 ? info.year : '—'}</p>
+                                                            <p className="hidden sm:block text-xs text-gray-500 truncate">{info.labels?.[0]?.name || '—'}</p>
+                                                            <div className="hidden sm:flex justify-end">
+                                                                <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${isSpinning ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500'}`}>{info.formats?.[0]?.name || 'Vinyl'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="divide-y divide-white/5">
+                                    {filteredAndSorted.map((release) => {
+                                        const info = release.basic_information || {};
+                                        const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
+                                        const isSpinning = nowSpinning?.id === release.id;
+                                        return (
+                                            <button key={release.instance_id || release.id} onClick={() => handleAlbumClick(release)}
+                                                className={`w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] ${isSpinning ? 'bg-violet-500/10 border-l-2 border-violet-500' : 'hover:bg-white/[0.03] border-l-2 border-transparent'}`}>
+                                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-800 flex-shrink-0 relative">
+                                                    <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
+                                                    {isSpinning && <div className="absolute inset-0 bg-violet-500/30 flex items-center justify-center"><Volume2 size={12} className="text-white animate-pulse" /></div>}
+                                                </div>
+                                                <div className="min-w-0 sm:contents">
+                                                    <div className="min-w-0">
+                                                        <p className={`text-sm font-medium truncate ${isSpinning ? 'text-violet-300' : 'text-white group-hover:text-violet-300'} transition-colors`} title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
+                                                        <p
+                                                            className="text-sm sm:text-xs text-gray-500 truncate sm:hidden mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSearchQuery(artist);
+                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                            }}
+                                                        >
+                                                            {artist} {info.year > 0 ? `· ${info.year}` : ''}
+                                                        </p>
+                                                    </div>
                                                     <p
-                                                        className="text-sm sm:text-xs text-gray-500 truncate sm:hidden mt-0.5 hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
+                                                        className="hidden sm:block text-sm text-gray-400 truncate hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setSearchQuery(artist);
                                                             window.scrollTo({ top: 0, behavior: 'smooth' });
                                                         }}
                                                     >
-                                                        {artist} {info.year > 0 ? `· ${info.year}` : ''}
+                                                        {artist || 'Unknown'}
                                                     </p>
+                                                    <p className="hidden sm:block text-sm text-gray-500 tabular-nums">{info.year > 0 ? info.year : '—'}</p>
+                                                    <p className="hidden sm:block text-xs text-gray-500 truncate">{info.labels?.[0]?.name || '—'}</p>
+                                                    <div className="hidden sm:flex justify-end">
+                                                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${isSpinning ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500'}`}>{info.formats?.[0]?.name || 'Vinyl'}</span>
+                                                    </div>
                                                 </div>
-                                                <p
-                                                    className="hidden sm:block text-sm text-gray-400 truncate hover:text-violet-300 hover:underline transition-colors pointer-events-auto relative z-10 w-fit"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSearchQuery(artist);
-                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                                    }}
-                                                >
-                                                    {artist || 'Unknown'}
-                                                </p>
-                                                <p className="hidden sm:block text-sm text-gray-500 tabular-nums">{info.year > 0 ? info.year : '—'}</p>
-                                                <p className="hidden sm:block text-xs text-gray-500 truncate">{info.labels?.[0]?.name || '—'}</p>
-                                                <div className="hidden sm:flex justify-end">
-                                                    <span className={`text-[11px] px-2 py-0.5 rounded-md font-medium ${isSpinning ? 'bg-violet-500/20 text-violet-300' : 'bg-white/5 text-gray-500'}`}>{info.formats?.[0]?.name || 'Vinyl'}</span>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
                     )}
 
                     {/* CRATE View */}
                     {!loading && !error && viewMode === 'crate' && filteredAndSorted.length > 0 && (
-                        <CrateView releases={filteredAndSorted} onAlbumClick={handleAlbumClick} />
+                        <CrateView releases={filteredAndSorted} onAlbumClick={handleAlbumClick} jumpToIndex={crateJumpIndex} />
                     )}
 
                     {/* Empty search */}
                     {!loading && !error && filteredAndSorted.length === 0 && searchQuery && (
                         <div className="text-center py-20"><p className="text-gray-500">No records match "{searchQuery}"</p></div>
+                    )}
+
+                    {/* Alpha Navigation Rail */}
+                    {!loading && !error && filteredAndSorted.length > 0 && activePage === 'collection' && (
+                        <AlphaNav
+                            items={filteredAndSorted}
+                            sortField={currentSortField}
+                            sortOrder={currentSortOrder}
+                            onJumpToLetter={handleJumpToLetter}
+                            onJumpToCrateIndex={viewMode === 'crate' ? handleJumpToCrateIndex : undefined}
+                        />
                     )}
                 </div>
             </div>
@@ -2049,6 +2259,9 @@ export const SpinVinyl = () => {
                         setSelectedAlbum(null);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
+                    folders={collectionFolders}
+                    collectionFields={collectionFields}
+                    onItemEdited={handleItemEdited}
                 />
             )}
 
@@ -2079,24 +2292,16 @@ export const SpinVinyl = () => {
                 />
             )}
 
-            {/* Scan success toast */}
-            {scanToast && (
-                <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom,0px)+12px)] left-1/2 -translate-x-1/2 z-[300] px-4 py-3 rounded-2xl bg-green-500/20 border border-green-500/40 backdrop-blur-xl shadow-xl flex items-center gap-2.5 text-sm font-semibold text-green-300 max-w-[90vw] animate-in slide-in-from-bottom-4 duration-300">
-                    <CheckCircle size={16} className="flex-shrink-0" />
-                    <span className="truncate">Added "{scanToast.title}" to your collection</span>
-                </div>
-            )}
-
             {/* Barcode scanner modal */}
             {showScanner && (
                 <BarcodeScanner
                     onClose={() => setShowScanner(false)}
                     clearCollectionCache={clearCollectionCache}
                     authUsername={authUsername}
-                    onAddSuccess={(title) => {
-                        setShowScanner(false);
-                        setScanToast({ title });
-                        setTimeout(() => setScanToast(null), 3500);
+                    onAddSuccess={() => {
+                        // BarcodeScanner shows its own brief "Added ✓" confirmation and returns
+                        // to scanning/searching — the modal only closes via its own close button
+                        // now, so a whole stack of records can be added in one session.
                     }}
                 />
             )}

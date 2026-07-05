@@ -208,6 +208,149 @@ body {
   animation: slide-up 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ── Alpha Navigation Rail ──────────────────────── */
+.alpha-rail {
+  position: fixed;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 6px 2px;
+  border-radius: 999px;
+  background: rgba(3, 7, 18, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+  touch-action: none;
+}
+
+@media (min-width: 640px) {
+  .alpha-rail {
+    right: 8px;
+    padding: 8px 3px;
+  }
+}
+
+.alpha-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(156, 163, 175, 0.6);
+  border-radius: 4px;
+  transition: color 0.15s, background-color 0.15s, transform 0.15s;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0;
+  line-height: 1;
+}
+
+@media (min-width: 640px) {
+  .alpha-letter {
+    width: 24px;
+    height: 20px;
+    font-size: 10px;
+  }
+}
+
+.alpha-letter:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.alpha-letter--active {
+  color: rgb(167, 139, 250); /* violet-400 */
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.alpha-letter--drag {
+  color: white;
+  background: rgba(139, 92, 246, 0.3);
+  transform: scale(1.2);
+}
+
+/* Drag indicator bubble */
+.alpha-drag-bubble {
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-right: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgb(139, 92, 246), rgb(168, 85, 247));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 900;
+  color: white;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.4);
+  animation: alpha-bubble-in 0.15s ease-out;
+  pointer-events: none;
+}
+
+@keyframes alpha-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+/* ── Non-alpha scroll position indicator ─────────── */
+.alpha-rail--scroll-indicator {
+  padding: 8px 6px;
+  gap: 0;
+}
+
+.scroll-track {
+  width: 3px;
+  height: 120px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+
+.scroll-thumb {
+  position: absolute;
+  left: 50%;
+  width: 7px;
+  height: 20px;
+  margin-left: -3.5px;
+  margin-top: -10px;
+  border-radius: 999px;
+  background: rgba(139, 92, 246, 0.5);
+  transition: top 0.1s ease-out;
+}
+
+/* ── Section Dividers ───────────────────────────── */
+.section-divider {
+  top: 56px; /* toolbar height */
+  background: rgba(3, 7, 18, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@media (min-width: 640px) {
+  .section-divider {
+    top: 64px;
+  }
+}
+
 /* ── Responsive Mobile Tables ───────────────────── */
 @media screen and (max-width: 768px) {
 

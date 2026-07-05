@@ -134,6 +134,15 @@ export const apiMiddleware = () => ({
 
             const h = await getHandlers();
 
+            // Vercel parses JSON POST bodies into req.body automatically in production;
+            // this dev server doesn't, so mirror that here for handlers that read req.body.
+            if (req.method === 'POST' && req.body === undefined) {
+                const chunks = [];
+                for await (const chunk of req) chunks.push(chunk);
+                const raw = Buffer.concat(chunks).toString('utf8');
+                try { req.body = raw ? JSON.parse(raw) : {}; } catch { req.body = raw; }
+            }
+
             // --- ROUTE: /api/discogs (Serverless / Express Style) ---
             if (url === '/discogs') {
                 try {

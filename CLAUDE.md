@@ -10,7 +10,7 @@
 - **Frontend**: React (v18) + Vite + Tailwind CSS
 - **API Routes**: Serverless functions located in `/api` (proxied in dev via `vite-api-proxy.js` and defined in `vite.config.js`)
 - **Database/Auth**: Supabase client (`@supabase/supabase-js`)
-- **Key Libraries**: Lucide React (icons), Leaflet (interactive maps), ZXing/Tesseract (scanning)
+- **Key Libraries**: Lucide React (icons), Leaflet (interactive maps), ZXing (barcode scanning)
 
 ## Coding Guidelines
 - **Components**: Functional components with hooks.

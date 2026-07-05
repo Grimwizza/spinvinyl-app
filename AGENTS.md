@@ -80,7 +80,7 @@ This is a Vite + React application with serverless API routes in `/api` (proxied
 
 ## 1. Stream & Resource Lifecycle
 * **Explicit Track Stop:** When stopping cameras, always iterate and stop all tracks (`track.stop()`) on the underlying `MediaStream` to turn off the hardware light indicator immediately.
-* **Lazy Loading Heavy SDKs:** Lazily import heavy scanning and hardware libraries (e.g., ZXing, Tesseract) using dynamic `import()` to optimize the bundle size.
+* **Lazy Loading Heavy SDKs:** Lazily import heavy scanning and hardware libraries (e.g., ZXing) using dynamic `import()` to optimize the bundle size.
 
 ## 2. Graceful Degradation
 * **Permission Fallbacks:** Handle permission rejection (`NotAllowedError`) or absence of device hardware gracefully by offering manual input forms. Never leave the UI stuck in a loading or blank state.

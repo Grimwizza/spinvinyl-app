@@ -86,7 +86,7 @@ const CrateCard = ({ release, isCenter }) => {
 };
 
 // ─── Main Component ───────────────────────────────────────────────
-export default function CrateView({ releases, onAlbumClick }) {
+export default function CrateView({ releases, onAlbumClick, jumpToIndex }) {
     const [centerIndex, setCenterIndex] = useState(0);
     const [isDragging,  setIsDragging]  = useState(false);
     const [dragStartX,  setDragStartX]  = useState(0);
@@ -100,6 +100,13 @@ export default function CrateView({ releases, onAlbumClick }) {
         if (total === 0) return;
         setCenterIndex(i => Math.min(i, total - 1));
     }, [total]);
+
+    // External jump-to-index (from AlphaNav)
+    useEffect(() => {
+        if (jumpToIndex != null && total > 0) {
+            setCenterIndex(Math.min(jumpToIndex, total - 1));
+        }
+    }, [jumpToIndex, total]);
 
     const advance = useCallback((dir) => {
         if (total === 0) return;
