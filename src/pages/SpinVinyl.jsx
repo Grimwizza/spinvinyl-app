@@ -393,10 +393,16 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(false);
     const [justSpun, setJustSpun] = useState(false);
+    const [spinCount, setSpinCount] = useState(() => getStoredStats().albumPlayCounts[String(release.id)] || 0);
     const [expandedTrack, setExpandedTrack] = useState(null); // key of the track showing lyrics
     const [lyricsText, setLyricsText] = useState('');
     const [lyricsLoading, setLyricsLoading] = useState(false);
     const [priceData, setPriceData] = useState(null);
+
+    // Keep the spin count in sync with real stats if the modal is reused for a different release
+    useEffect(() => {
+        setSpinCount(getStoredStats().albumPlayCounts[String(release.id)] || 0);
+    }, [release.id]);
 
     // Lock body scroll while modal is open (iOS + Android)
     useEffect(() => {
@@ -507,6 +513,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
 
     const handleSpinClick = () => {
         onSpin(release, detail);
+        setSpinCount(c => c + 1);
         setJustSpun(true);
         setTimeout(() => setJustSpun(false), 2000);
     };
@@ -675,7 +682,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                                     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all hover:scale-[1.02] active:scale-[0.98] ${justSpun ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gradient-to-r from-terracotta-600 to-brass-600 hover:from-terracotta-500 hover:to-brass-500 text-white shadow-terracotta-500/25'}`}
                                 >
                                     {justSpun ? (
-                                        <><CheckCircle size={16} /> Spun ✓</>
+                                        <><CheckCircle size={16} /> Spun {spinCount}×</>
                                     ) : (
                                         <><Disc3 size={16} className="animate-spin" style={{ animationDuration: '3s' }} /> Spin This</>
                                     )}
@@ -712,6 +719,9 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                                     })()}
                                 </div>
                             </div>
+                            <p className="text-[11px] text-stone-500 mt-1.5">
+                                {spinCount > 0 ? `Spun ${spinCount}× so far` : 'Not logged yet'}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -968,6 +978,7 @@ export const SpinVinyl = () => {
     const [collectionFolders, setCollectionFolders] = useState([]);
     const [collectionFields, setCollectionFields] = useState(null);
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
+    const [, setStatsVersion] = useState(0); // bumped to force a re-render after logging a spin, so RecommendWidget's albumPlayCounts prop actually refreshes
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
 
@@ -1170,6 +1181,7 @@ export const SpinVinyl = () => {
             labels: info.labels?.[0]?.name ? [info.labels[0].name] : [],
             startTime: new Date().toISOString(),
         });
+        setStatsVersion(v => v + 1);
     };
 
     // ─── Fetch folders + collection field definitions once (used by the album edit form) ─
