@@ -1153,7 +1153,7 @@ export const SpinVinyl = () => {
     const [archiving, setArchiving] = useState(false);
     const [archiveProgress, setArchiveProgress] = useState(0);
     const [exporting, setExporting] = useState(false);
-    const [, setStatsVersion] = useState(0); // bumped to force a re-render after logging a spin, so RecommendWidget's albumPlayCounts prop actually refreshes
+    const [statsVersion, setStatsVersion] = useState(0); // bumped to force a re-render after logging a spin, so albumPlayCounts-dependent UI actually refreshes
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
 
@@ -1552,6 +1552,8 @@ export const SpinVinyl = () => {
         [filteredAndSorted, currentSortField]
     );
 
+    const albumPlayCounts = useMemo(() => getStoredStats().albumPlayCounts, [statsVersion]);
+
     const [crateJumpIndex, setCrateJumpIndex] = useState(null);
 
     const handleJumpToLetter = useCallback((letter) => {
@@ -1760,7 +1762,7 @@ export const SpinVinyl = () => {
                     {!loading && !error && releases.length > 0 && (
                         <RecommendWidget
                             releases={releases}
-                            albumPlayCounts={getStoredStats().albumPlayCounts}
+                            albumPlayCounts={albumPlayCounts}
                             onSpinThis={handleMarkAsSpun}
                         />
                     )}
@@ -1806,6 +1808,9 @@ export const SpinVinyl = () => {
                                                                     <Music2 size={14} /> VIEW ALBUM
                                                                 </div>
                                                             </div>
+                                                            {!albumPlayCounts[String(release.id)] && (
+                                                                <div className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-terracotta-400 ring-2 ring-stone-950/70" aria-hidden="true" />
+                                                            )}
                                                         </div>
                                                         <div className="p-3 bg-white/[0.03]">
                                                             <p className="text-sm font-semibold text-white truncate leading-tight" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
@@ -1846,6 +1851,9 @@ export const SpinVinyl = () => {
                                                             <Music2 size={14} /> VIEW ALBUM
                                                         </div>
                                                     </div>
+                                                    {!albumPlayCounts[String(release.id)] && (
+                                                        <div className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-terracotta-400 ring-2 ring-stone-950/70" aria-hidden="true" />
+                                                    )}
                                                 </div>
                                                 <div className="p-3 bg-white/[0.03]">
                                                     <p className="text-sm font-semibold text-white truncate leading-tight" title={cleanName(info.title)}>{cleanName(info.title) || 'Unknown'}</p>
@@ -1892,6 +1900,9 @@ export const SpinVinyl = () => {
                                                         className="w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] hover:bg-white/[0.03] border-l-2 border-transparent">
                                                         <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-800 flex-shrink-0 relative">
                                                             <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
+                                                            {!albumPlayCounts[String(release.id)] && (
+                                                                <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-terracotta-400 ring-1 ring-stone-950/70" aria-hidden="true" />
+                                                            )}
                                                         </div>
                                                         <div className="min-w-0 sm:contents">
                                                             <div className="min-w-0">
@@ -1939,6 +1950,9 @@ export const SpinVinyl = () => {
                                                 className="w-full group text-left grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-3 sm:gap-4 items-center px-4 py-3 min-h-[56px] transition-all duration-200 rounded-lg focus:outline-none active:bg-white/[0.06] active:scale-[0.99] hover:bg-white/[0.03] border-l-2 border-transparent">
                                                 <div className="w-12 h-12 rounded-lg overflow-hidden bg-stone-800 flex-shrink-0 relative">
                                                     <AlbumArt release={release} alt="" className="w-full h-full object-cover" fallbackSize={16} />
+                                                    {!albumPlayCounts[String(release.id)] && (
+                                                        <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-terracotta-400 ring-1 ring-stone-950/70" aria-hidden="true" />
+                                                    )}
                                                 </div>
                                                 <div className="min-w-0 sm:contents">
                                                     <div className="min-w-0">
