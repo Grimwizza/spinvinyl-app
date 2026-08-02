@@ -193,21 +193,6 @@ export default function AlphaNav({ items, sortField, sortOrder, onJumpToLetter, 
         };
     }, [isDragging, handleRailPointerMove, handleRailPointerUp]);
 
-    // ── Non-alpha: scroll position indicator ────────────────────
-    const [scrollPct, setScrollPct] = useState(0);
-
-    useEffect(() => {
-        if (isAlpha) return;
-        const handleScroll = () => {
-            const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-            if (maxScroll <= 0) { setScrollPct(0); return; }
-            setScrollPct(Math.min(100, (window.scrollY / maxScroll) * 100));
-        };
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        handleScroll();
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, [isAlpha]);
-
     if (!items.length) return null;
 
     // ── Alpha rail ──────────────────────────────────────────────
@@ -255,17 +240,8 @@ export default function AlphaNav({ items, sortField, sortOrder, onJumpToLetter, 
         );
     }
 
-    // ── Non-alpha scroll indicator ──────────────────────────────
-    return (
-        <div className="alpha-rail alpha-rail--scroll-indicator" style={railStyle} aria-hidden="true">
-            <div className="scroll-track">
-                <div
-                    className="scroll-thumb"
-                    style={{ top: `${scrollPct}%` }}
-                />
-            </div>
-        </div>
-    );
+    // ── Non-alpha: no rail (letter jump is meaningless outside a-z sorts) ──
+    return null;
 }
 
 // ─── Utility: group items by letter ────────────────────────────

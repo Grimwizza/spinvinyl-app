@@ -318,32 +318,6 @@ body {
   }
 }
 
-/* ── Non-alpha scroll position indicator ─────────── */
-.alpha-rail--scroll-indicator {
-  padding: 8px 6px;
-  gap: 0;
-}
-
-.scroll-track {
-  width: 3px;
-  height: 120px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  position: relative;
-}
-
-.scroll-thumb {
-  position: absolute;
-  left: 50%;
-  width: 7px;
-  height: 20px;
-  margin-left: -3.5px;
-  margin-top: -10px;
-  border-radius: 999px;
-  background: rgba(196, 98, 45, 0.5);
-  transition: top 0.1s ease-out;
-}
-
 /* ── Section Dividers ───────────────────────────── */
 .section-divider {
   top: 56px; /* toolbar height */
