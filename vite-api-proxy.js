@@ -4,7 +4,7 @@
 let _handlers = null;
 async function getHandlers() {
     if (_handlers) return _handlers;
-    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync, identify, collectionArchive] = await Promise.all([
+    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync, identify, collectionArchive, lastfm] = await Promise.all([
         import('./api/discogs.js'),
         import('./api/lyrics.js'),
         import('./api/releases.js'),
@@ -15,6 +15,7 @@ async function getHandlers() {
         import('./api/sync.js'),
         import('./api/identify.js'),
         import('./api/collection-archive.js'),
+        import('./api/lastfm.js'),
     ]);
     _handlers = {
         discogs: discogs.default,
@@ -27,6 +28,7 @@ async function getHandlers() {
         sync: sync.default,
         identify: identify.default,
         collectionArchive: collectionArchive.default,
+        lastfm: lastfm.default,
     };
     return _handlers;
 }
@@ -135,6 +137,16 @@ export const apiMiddleware = () => ({
                     const anthropicKeyMatch = envConfig.match(/^ANTHROPIC_API_KEY=(.*)$/m);
                     if (anthropicKeyMatch && anthropicKeyMatch[1]) {
                         process.env.ANTHROPIC_API_KEY = anthropicKeyMatch[1].replace(/["']/g, '').trim();
+                    }
+
+                    const lastfmApiKeyMatch = envConfig.match(/^LASTFM_API_KEY=(.*)$/m);
+                    if (lastfmApiKeyMatch && lastfmApiKeyMatch[1]) {
+                        process.env.LASTFM_API_KEY = lastfmApiKeyMatch[1].replace(/["']/g, '').trim();
+                    }
+
+                    const lastfmSecretMatch = envConfig.match(/^LASTFM_SHARED_SECRET=(.*)$/m);
+                    if (lastfmSecretMatch && lastfmSecretMatch[1]) {
+                        process.env.LASTFM_SHARED_SECRET = lastfmSecretMatch[1].replace(/["']/g, '').trim();
                     }
                 }
             } catch (e) {
@@ -286,6 +298,24 @@ export const apiMiddleware = () => ({
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
                         h.sync(req, mockedRes).catch(reject);
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/lastfm (scrobble integration) ---
+            if (url === '/lastfm') {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        h.lastfm(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);

@@ -90,6 +90,19 @@ export default async function handler(req, res) {
         return res.status(200).json({ count: count || 0, lastUpdatedAt: latest?.updated_at || null });
     }
 
+    // ── export: full raw archive rows for the authenticated user ───
+    if (req.method === 'GET' && action === 'export') {
+        const { data, error } = await sb.from('sv_collection_archive')
+            .select('*')
+            .eq('username', username)
+            .order('instance_id', { ascending: true });
+        if (error) {
+            console.error('[CollectionArchive] Export error:', error);
+            return res.status(500).json({ error: 'Failed to export archive' });
+        }
+        return res.status(200).json({ items: data || [] });
+    }
+
     // ── upsert: single item (ongoing capture) or batch (backfill) ──
     if (req.method === 'POST' && action === 'upsert') {
         let body;
@@ -143,6 +156,75 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'Failed to save archive items' });
         }
         return res.status(200).json({ ok: true, saved: rows.length });
+    }
+
+    // ── lending: read the lending status of one archived item ──────
+    if (req.method === 'GET' && action === 'lending') {
+        const instanceId = Number(url.searchParams.get('instanceId'));
+        if (!instanceId) return res.status(400).json({ error: 'instanceId is required' });
+        const { data, error } = await sb.from('sv_collection_archive')
+            .select('lent_to, lent_at, lent_notes')
+            .eq('username', username)
+            .eq('instance_id', instanceId)
+            .maybeSingle();
+        if (error) {
+            console.error('[CollectionArchive] Lending fetch error:', error);
+            return res.status(500).json({ error: 'Failed to read lending status' });
+        }
+        return res.status(200).json({ lentTo: data?.lent_to || null, lentAt: data?.lent_at || null, lentNotes: data?.lent_notes || null });
+    }
+
+    // ── updateLending: TRUE PARTIAL UPDATE — touches ONLY the three lending
+    // columns, never title/artist/metadata. Deliberately .update(), not
+    // .upsert(): a plain upsert here would clobber every other column on
+    // this row with null, since a lending-only payload has none of them.
+    if (req.method === 'POST' && action === 'updateLending') {
+        let body;
+        try {
+            body = JSON.parse(await readBody(req));
+        } catch {
+            return res.status(400).json({ error: 'Invalid JSON body' });
+        }
+
+        const instanceId = Number(body?.instanceId);
+        const releaseId = Number(body?.releaseId);
+        if (!instanceId) return res.status(400).json({ error: 'instanceId is required' });
+
+        const lentTo = body.lentTo != null ? String(body.lentTo).trim().slice(0, 200) || null : null;
+        const lentNotes = body.lentNotes != null ? String(body.lentNotes).slice(0, 1000) : null;
+        const patch = {
+            lent_to: lentTo,
+            lent_at: lentTo ? new Date().toISOString() : null,
+            lent_notes: lentTo ? lentNotes : null,
+        };
+
+        const { data: updated, error: updateErr } = await sb.from('sv_collection_archive')
+            .update(patch)
+            .eq('username', username)
+            .eq('instance_id', instanceId)
+            .select('instance_id')
+            .maybeSingle();
+        if (updateErr) {
+            console.error('[CollectionArchive] updateLending error:', updateErr);
+            return res.status(500).json({ error: 'Failed to update lending status' });
+        }
+
+        // No archived row exists yet for this item (user hasn't backed up this
+        // record) — INSERT a minimal row. This is a plain insert path, only
+        // reached when the update above confirmed zero matching rows, so it
+        // can never clobber a pre-existing metadata-rich row.
+        if (!updated) {
+            if (!releaseId) return res.status(400).json({ error: 'releaseId is required to create a new archive row' });
+            const { error: insertErr } = await sb.from('sv_collection_archive').insert({
+                username, release_id: releaseId, instance_id: instanceId, provenance: 'edit', ...patch,
+            });
+            if (insertErr) {
+                console.error('[CollectionArchive] updateLending insert-fallback error:', insertErr);
+                return res.status(500).json({ error: 'Failed to save lending status' });
+            }
+        }
+
+        return res.status(200).json({ ok: true, lending: patch });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { BarChart2, CheckCircle, Clock, Disc3, DollarSign, Music2, RefreshCw, TrendingUp } from 'lucide-react';
 import {
-    getPeriodSpinCount, getTopAlbums, getGenreBreakdown,
+    getPeriodSpinCount, getTopAlbums, getGenreBreakdown, getDecadeBreakdown,
     getDayMap, getUniqueAlbumsSpun, getStoredStats, getCurrentStreak,
 } from '../lib/statsEngine.js';
 import { readPriceCache, fetchReleasePrice } from '../lib/priceCache.js';
@@ -183,6 +183,32 @@ const GenreBreakdown = ({ genres }) => {
                 {topGenres.map(({ genre, count }) => (
                     <div key={genre} className="flex items-center gap-3">
                         <p className="text-xs text-stone-400 w-24 flex-shrink-0 truncate">{genre}</p>
+                        <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
+                            <div
+                                className="h-full rounded-full bg-gradient-to-r from-brass-500 to-terracotta-500"
+                                style={{ width: `${(count / maxCount) * 100}%`, transition: 'width 0.7s ease' }}
+                            />
+                        </div>
+                        <span className="text-xs font-bold text-stone-500 w-6 text-right">{count}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+const DecadeBreakdown = ({ decades }) => {
+    if (!decades.length) return null;
+    const topDecades = decades.slice(0, 8);
+    const maxCount = topDecades[0]?.count || 1;
+
+    return (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <h3 className="text-sm font-bold text-white mb-4">Decade Breakdown</h3>
+            <div className="space-y-2.5">
+                {topDecades.map(({ decade, count }) => (
+                    <div key={decade} className="flex items-center gap-3">
+                        <p className="text-xs text-stone-400 w-24 flex-shrink-0 truncate">{decade}</p>
                         <div className="flex-1 h-2 rounded-full bg-white/5 overflow-hidden">
                             <div
                                 className="h-full rounded-full bg-gradient-to-r from-brass-500 to-terracotta-500"
@@ -381,6 +407,7 @@ const StatsPage = ({ collectionCount, releases }) => {
     const allCount = useMemo(() => getPeriodSpinCount('all'), []);
     const topAlbums = useMemo(() => getTopAlbums(5), []);
     const genres = useMemo(() => getGenreBreakdown(), []);
+    const decades = useMemo(() => getDecadeBreakdown(), []);
     const dayMap = useMemo(() => getDayMap(), []);
     const stats = useMemo(() => getStoredStats(), []);
     const spunCount = useMemo(() => getUniqueAlbumsSpun(), []);
@@ -432,6 +459,7 @@ const StatsPage = ({ collectionCount, releases }) => {
 
                 {/* Genre Breakdown */}
                 {genres.length > 0 && <GenreBreakdown genres={genres} />}
+                {decades.length > 0 && <DecadeBreakdown decades={decades} />}
 
                 {/* Collection Progress */}
                 <CollectionProgress spunCount={spunCount} totalCount={collectionCount || 0} />

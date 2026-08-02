@@ -127,3 +127,35 @@ export async function getArchiveStatus(username) {
 }
 
 export const getLastBackfillAt = () => localStorage.getItem(LAST_BACKFILL_KEY);
+
+/** Fetch every archived row for the signed-in user (full export). */
+export async function getArchiveExport(username) {
+    if (!username) return [];
+    const res = await fetch('/api/collection-archive?action=export', { credentials: 'include' });
+    if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+    return (await res.json()).items || [];
+}
+
+/** Fetch lending status for one archived item. */
+export async function getLendingStatus(instanceId) {
+    if (!instanceId) return null;
+    try {
+        const res = await fetch(`/api/collection-archive?action=lending&instanceId=${instanceId}`, { credentials: 'include' });
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+/** Partial update of ONLY lending columns — never touches title/artist/metadata. */
+export async function updateLendingStatus({ instanceId, releaseId, lentTo, lentNotes }) {
+    const res = await fetch('/api/collection-archive?action=updateLending', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ instanceId, releaseId, lentTo, lentNotes }),
+    });
+    if (!res.ok) throw new Error(`Lending update failed: ${res.status}`);
+    return res.json();
+}

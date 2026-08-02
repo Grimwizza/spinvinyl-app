@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle, RefreshCw, Database} from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle, RefreshCw, Database, Youtube, Play, Users, UserCheck, Undo2} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
 import { fetchReleasePrice } from '../lib/priceCache.js';
-import { buildArchiveItem, pushArchiveItem, backfillCollectionArchive, getArchiveStatus } from '../lib/collectionArchive.js';
+import { buildArchiveItem, pushArchiveItem, backfillCollectionArchive, getArchiveStatus, getLendingStatus, updateLendingStatus } from '../lib/collectionArchive.js';
+import { exportAllDataAsJson, exportCollectionAsCsv } from '../lib/dataExport.js';
+import { getLastfmStatus, disconnectLastfm, scrobbleLastfm } from '../lib/lastfm.js';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
@@ -388,6 +390,58 @@ const AlbumArt = ({ release, alt, className, fallbackSize = 40, fallbackGradient
     );
 };
 
+// Discogs' release.videos[].uri is a real YouTube link in one of a few shapes —
+// this handles watch?v=, youtu.be/, and (defensively) an already-embed URL.
+const extractYouTubeId = (uri) => {
+    if (!uri) return null;
+    const m = uri.match(/(?:[?&]v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+};
+
+const StreamingPreview = ({ videos }) => {
+    const [playing, setPlaying] = useState(false);
+    const video = useMemo(() => {
+        for (const v of videos || []) {
+            if (v.embed === false) continue;
+            const id = extractYouTubeId(v.uri);
+            if (id) return { id, title: v.title };
+        }
+        return null;
+    }, [videos]);
+
+    if (!video) return null;
+
+    return (
+        <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
+            <div className="flex items-center gap-2 mb-3">
+                <Youtube size={14} className="text-red-400" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-red-400">Preview</span>
+            </div>
+            <div className="relative w-full rounded-lg overflow-hidden bg-black" style={{ aspectRatio: '16 / 9' }}>
+                {playing ? (
+                    <iframe
+                        className="w-full h-full"
+                        src={`https://www.youtube.com/embed/${video.id}?autoplay=1`}
+                        title={video.title || 'YouTube preview'}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                        loading="lazy"
+                    />
+                ) : (
+                    <button onClick={() => setPlaying(true)} className="absolute inset-0 w-full h-full flex items-center justify-center group" aria-label="Play preview">
+                        <img src={`https://img.youtube.com/vi/${video.id}/hqdefault.jpg`} alt=""
+                            className="absolute inset-0 w-full h-full object-cover opacity-70 group-hover:opacity-90 transition-opacity" loading="lazy" />
+                        <div className="relative w-14 h-14 rounded-full bg-black/60 border border-white/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Play size={22} className="text-white ml-0.5" fill="currentColor" />
+                        </div>
+                    </button>
+                )}
+            </div>
+            {video.title && <p className="text-[11px] text-stone-500 mt-1.5 truncate">{video.title}</p>}
+        </div>
+    );
+};
+
 // ─── Album Detail Modal ─────────────────────────────────────────
 const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, collectionFields, onItemEdited, authUsername }) => {
     const [detail, setDetail] = useState(null);
@@ -400,11 +454,57 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
     const [lyricsText, setLyricsText] = useState('');
     const [lyricsLoading, setLyricsLoading] = useState(false);
     const [priceData, setPriceData] = useState(null);
+    const [lending, setLending] = useState(null); // { lentTo, lentAt, lentNotes } | null
+    const [lendingForm, setLendingForm] = useState(false); // showing the borrower-name form
+    const [lendingBorrower, setLendingBorrower] = useState('');
+    const [lendingNote, setLendingNote] = useState('');
+    const [lendingSaving, setLendingSaving] = useState(false);
 
     // Keep the spin count in sync with real stats if the modal is reused for a different release
     useEffect(() => {
         setSpinCount(getStoredStats().albumPlayCounts[String(release.id)] || 0);
     }, [release.id]);
+
+    // Fetch lending status for this specific collection item, resetting any
+    // stale form state if the modal is reused for a different release
+    useEffect(() => {
+        setLendingForm(false);
+        setLendingBorrower('');
+        setLendingNote('');
+        if (!release?.instance_id) { setLending(null); return; }
+        getLendingStatus(release.instance_id).then(setLending);
+    }, [release?.instance_id]);
+
+    const handleSaveLending = async () => {
+        if (!lendingBorrower.trim()) return;
+        setLendingSaving(true);
+        try {
+            const result = await updateLendingStatus({
+                instanceId: release.instance_id, releaseId: release.id,
+                lentTo: lendingBorrower.trim(), lentNotes: lendingNote.trim() || null,
+            });
+            setLending(result.lending);
+            setLendingForm(false);
+            setLendingBorrower('');
+            setLendingNote('');
+        } catch (e) {
+            console.error('[SpinVinyl] Lending save failed:', e);
+        } finally {
+            setLendingSaving(false);
+        }
+    };
+
+    const handleMarkReturned = async () => {
+        setLendingSaving(true);
+        try {
+            const result = await updateLendingStatus({ instanceId: release.instance_id, releaseId: release.id, lentTo: null });
+            setLending(result.lending);
+        } catch (e) {
+            console.error('[SpinVinyl] Mark-returned failed:', e);
+        } finally {
+            setLendingSaving(false);
+        }
+    };
 
     // Lock body scroll while modal is open (iOS + Android)
     useEffect(() => {
@@ -750,6 +850,9 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                         </div>
                     ) : (
                         <div className="space-y-4">
+                            {/* Streaming Preview */}
+                            {detail?.videos?.length > 0 && <StreamingPreview videos={detail.videos} />}
+
                             {/* Artist Bio */}
                             {artistBio && (
                                 <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
@@ -878,6 +981,67 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                                 </div>
                             )}
 
+                            {/* Lending */}
+                            <div className="rounded-xl bg-white/[0.03] border border-white/5 p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Users size={14} className="text-sky-400" />
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">Lending</span>
+                                </div>
+                                {lending?.lentTo ? (
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-sm text-white font-semibold truncate">Lent to {lending.lentTo}</p>
+                                            {lending.lentAt && <p className="text-xs text-stone-500">since {new Date(lending.lentAt).toLocaleDateString()}</p>}
+                                            {lending.lentNotes && <p className="text-xs text-stone-400 mt-1">{lending.lentNotes}</p>}
+                                        </div>
+                                        <button
+                                            onClick={handleMarkReturned}
+                                            disabled={lendingSaving}
+                                            className="flex items-center gap-1.5 px-3 py-2 min-h-[36px] rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-bold transition-colors disabled:opacity-60 flex-shrink-0"
+                                        >
+                                            <Undo2 size={12} /> Returned
+                                        </button>
+                                    </div>
+                                ) : lendingForm ? (
+                                    <div className="space-y-2">
+                                        <input
+                                            value={lendingBorrower}
+                                            onChange={e => setLendingBorrower(e.target.value)}
+                                            placeholder="Borrower's name"
+                                            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-stone-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+                                        />
+                                        <input
+                                            value={lendingNote}
+                                            onChange={e => setLendingNote(e.target.value)}
+                                            placeholder="Note (optional)"
+                                            className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-stone-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-400"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={handleSaveLending}
+                                                disabled={lendingSaving || !lendingBorrower.trim()}
+                                                className="flex-1 py-2 rounded-lg bg-sky-400/10 hover:bg-sky-400/20 border border-sky-400/30 text-sky-300 text-xs font-bold transition-colors disabled:opacity-60"
+                                            >
+                                                Save
+                                            </button>
+                                            <button
+                                                onClick={() => setLendingForm(false)}
+                                                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 text-xs font-bold transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setLendingForm(true)}
+                                        className="flex items-center gap-1.5 px-3 py-2 min-h-[36px] rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-bold transition-colors"
+                                    >
+                                        <UserCheck size={12} /> Mark as lent out
+                                    </button>
+                                )}
+                            </div>
+
                             {/* Tracklist */}
                             {detail?.tracklist?.length > 0 && (
                                 <div className="space-y-4">
@@ -985,8 +1149,10 @@ export const SpinVinyl = () => {
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
     const [isSyncing, setIsSyncing] = useState(false);
     const [archiveStatus, setArchiveStatus] = useState(null);
+    const [lastfmStatus, setLastfmStatus] = useState(null);
     const [archiving, setArchiving] = useState(false);
     const [archiveProgress, setArchiveProgress] = useState(0);
+    const [exporting, setExporting] = useState(false);
     const [, setStatsVersion] = useState(0); // bumped to force a re-render after logging a spin, so RecommendWidget's albumPlayCounts prop actually refreshes
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
@@ -1005,6 +1171,7 @@ export const SpinVinyl = () => {
                     setAuthUsername(data.username);
                     pullFromCloud(data.username).catch(() => {});
                     getArchiveStatus(data.username).then(setArchiveStatus).catch(() => {});
+                    getLastfmStatus().then(setLastfmStatus).catch(() => {});
                 } else {
                     setIsAuthenticated(false);
                 }
@@ -1192,6 +1359,14 @@ export const SpinVinyl = () => {
             startTime: new Date().toISOString(),
         });
         setStatsVersion(v => v + 1);
+
+        if (lastfmStatus?.connected) {
+            scrobbleLastfm({
+                artist: (info.artists || []).map(a => cleanName(a.name)).join(', ') || 'Unknown',
+                track: cleanName(info.title || detail?.title || 'Unknown'),
+                timestamp: Math.floor(Date.now() / 1000),
+            });
+        }
     };
 
     // ─── Fetch folders + collection field definitions once (used by the album edit form) ─
@@ -1264,6 +1439,50 @@ export const SpinVinyl = () => {
             setArchiveProgress(0);
         }
     }, [archiving, authUsername, releases]);
+
+    // ─── Export the user's own data (archive + local stats) as a download ──
+    const handleExportJson = useCallback(async () => {
+        if (exporting || !authUsername) return;
+        setExporting(true);
+        try {
+            await exportAllDataAsJson(authUsername);
+        } catch (e) {
+            console.error('[SpinVinyl] JSON export failed:', e);
+        } finally {
+            setExporting(false);
+        }
+    }, [exporting, authUsername]);
+
+    const handleExportCsv = useCallback(async () => {
+        if (exporting || !authUsername) return;
+        setExporting(true);
+        try {
+            await exportCollectionAsCsv(authUsername);
+        } catch (e) {
+            console.error('[SpinVinyl] CSV export failed:', e);
+        } finally {
+            setExporting(false);
+        }
+    }, [exporting, authUsername]);
+
+    // ─── Last.fm connect/disconnect ────────────────────────────────
+    const handleDisconnectLastfm = useCallback(async () => {
+        await disconnectLastfm();
+        setLastfmStatus(null);
+    }, []);
+
+    // Handle the redirect back from /api/lastfm?action=callback (?lastfm=connected|error)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const lastfmResult = params.get('lastfm');
+        if (!lastfmResult) return;
+        if (lastfmResult === 'connected') {
+            getLastfmStatus().then(setLastfmStatus).catch(() => {});
+        }
+        params.delete('lastfm');
+        const newSearch = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (newSearch ? `?${newSearch}` : ''));
+    }, []);
 
     // ─── Log out (extracted so it can be shared by the compact account row → AccountSheet) ──
     const handleLogout = useCallback(async () => {
@@ -1879,6 +2098,11 @@ export const SpinVinyl = () => {
                 totalReleases={releases.length}
                 canArchive={!loading && releases.length > 0}
                 onBackfillArchive={handleBackfillArchive}
+                exporting={exporting}
+                onExportJson={handleExportJson}
+                onExportCsv={handleExportCsv}
+                lastfmStatus={lastfmStatus}
+                onDisconnectLastfm={handleDisconnectLastfm}
                 onLogout={handleLogout}
             />
 

@@ -152,6 +152,14 @@ export const getGenreBreakdown = () => {
         .map(([genre, count]) => ({ genre, count }));
 };
 
+/** Sorted decade breakdown: [{ decade, count }] */
+export const getDecadeBreakdown = () => {
+    const stats = getStoredStats();
+    return Object.entries(stats.decadePlays)
+        .sort(([, a], [, b]) => b - a)
+        .map(([decade, count]) => ({ decade, count }));
+};
+
 /**
  * Day activity map for the calendar heatmap.
  * Returns { 'YYYY-MM-DD': spinCount }.

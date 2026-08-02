@@ -5,6 +5,9 @@
 -- Run this once by hand in the Supabase SQL editor (this repo has no
 -- migration tooling — see api/sync.js for the sibling sv_user_stats table,
 -- which was presumably created the same way).
+--
+-- See migration_2026-08-02_lending_tracker.sql for lending-tracker columns
+-- added to this table after initial creation.
 
 create table if not exists sv_collection_archive (
     id                bigint generated always as identity primary key,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Database, X } from 'lucide-react';
+import { RefreshCw, Database, FileDown, Music, X } from 'lucide-react';
 
 export default function AccountSheet({
     isOpen,
@@ -14,6 +14,11 @@ export default function AccountSheet({
     totalReleases,
     canArchive,
     onBackfillArchive,
+    exporting,
+    onExportJson,
+    onExportCsv,
+    lastfmStatus,
+    onDisconnectLastfm,
     onLogout,
 }) {
     if (!isOpen) return null;
@@ -66,6 +71,55 @@ export default function AccountSheet({
                     >
                         {archiving ? `Backing up ${archiveProgress}/${totalReleases}…` : 'Back up to cloud'}
                     </button>
+                </div>
+
+                {/* Data export */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-2">
+                        <FileDown size={14} className="text-stone-400 flex-shrink-0" />
+                        <span className="text-sm text-stone-300 font-semibold">Export your data</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={onExportCsv}
+                            disabled={exporting}
+                            className="px-3 py-2 min-h-[36px] rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-bold transition-colors disabled:opacity-60 active:opacity-70"
+                        >
+                            CSV
+                        </button>
+                        <button
+                            onClick={onExportJson}
+                            disabled={exporting}
+                            className="px-3 py-2 min-h-[36px] rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-bold transition-colors disabled:opacity-60 active:opacity-70"
+                        >
+                            JSON
+                        </button>
+                    </div>
+                </div>
+
+                {/* Last.fm scrobbling */}
+                <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div className="flex items-center gap-2">
+                        <Music size={14} className="text-stone-400 flex-shrink-0" />
+                        <span className="text-sm text-stone-300 font-semibold">
+                            {lastfmStatus?.connected ? `Last.fm: ${lastfmStatus.lastfmUsername}` : 'Last.fm not connected'}
+                        </span>
+                    </div>
+                    {lastfmStatus?.connected ? (
+                        <button
+                            onClick={onDisconnectLastfm}
+                            className="px-3 py-2 min-h-[36px] rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-bold transition-colors"
+                        >
+                            Disconnect
+                        </button>
+                    ) : (
+                        <a
+                            href="/api/lastfm?action=connect"
+                            className="px-3 py-2 min-h-[36px] rounded-full bg-red-400/10 hover:bg-red-400/20 border border-red-400/30 text-red-300 text-xs font-bold transition-colors flex items-center"
+                        >
+                            Connect Last.fm
+                        </a>
+                    )}
                 </div>
 
                 <button
