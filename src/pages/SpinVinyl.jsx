@@ -1787,7 +1787,7 @@ export const SpinVinyl = () => {
 
                     {/* GRID View */}
                     {!loading && !error && viewMode === 'grid' && (
-                        <div className="pr-8 sm:pr-10">
+                        <div className={groupedByLetter ? 'pr-8 sm:pr-10' : ''}>
                             {groupedByLetter ? (
                                 groupedByLetter.map(({ letter, items: groupItems }) => (
                                     <div key={letter}>
@@ -1875,7 +1875,7 @@ export const SpinVinyl = () => {
 
                     {/* LIST View */}
                     {!loading && !error && viewMode === 'list' && (
-                        <div className="pr-8 sm:pr-10">
+                        <div className={groupedByLetter ? 'pr-8 sm:pr-10' : ''}>
                             <div className="hidden sm:grid grid-cols-[auto_1fr_1fr_80px_120px_100px] gap-4 px-4 py-2 text-[11px] uppercase tracking-wider font-semibold text-stone-500 border-b border-white/5 mb-1">
                                 <div className="w-12" /><div>Title</div><div>Artist</div><div>Year</div><div>Label</div><div className="text-right">Format</div>
                             </div>
