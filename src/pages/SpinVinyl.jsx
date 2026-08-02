@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle, RefreshCw} from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle, RefreshCw, Database} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
 import { fetchReleasePrice } from '../lib/priceCache.js';
+import { buildArchiveItem, pushArchiveItem, backfillCollectionArchive, getArchiveStatus } from '../lib/collectionArchive.js';
 import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
@@ -387,7 +388,7 @@ const AlbumArt = ({ release, alt, className, fallbackSize = 40, fallbackGradient
 };
 
 // ─── Album Detail Modal ─────────────────────────────────────────
-const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, collectionFields, onItemEdited }) => {
+const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, collectionFields, onItemEdited, authUsername }) => {
     const [detail, setDetail] = useState(null);
     const [artistInfo, setArtistInfo] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -609,6 +610,8 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                     onSaved={(updatedRelease, payload) => {
                         setEditing(false);
                         onItemEdited?.(release.instance_id, payload);
+                        const item = buildArchiveItem(release, { ...payload, instanceId: release.instance_id }, { provenance: 'edit' });
+                        pushArchiveItem(item, authUsername);
                     }}
                 />
               ) : (
@@ -979,6 +982,9 @@ export const SpinVinyl = () => {
     const [collectionFields, setCollectionFields] = useState(null);
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
     const [isSyncing, setIsSyncing] = useState(false);
+    const [archiveStatus, setArchiveStatus] = useState(null);
+    const [archiving, setArchiving] = useState(false);
+    const [archiveProgress, setArchiveProgress] = useState(0);
     const [, setStatsVersion] = useState(0); // bumped to force a re-render after logging a spin, so RecommendWidget's albumPlayCounts prop actually refreshes
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
@@ -996,6 +1002,7 @@ export const SpinVinyl = () => {
                     setIsAuthenticated(true);
                     setAuthUsername(data.username);
                     pullFromCloud(data.username).catch(() => {});
+                    getArchiveStatus(data.username).then(setArchiveStatus).catch(() => {});
                 } else {
                     setIsAuthenticated(false);
                 }
@@ -1224,6 +1231,22 @@ export const SpinVinyl = () => {
         }
     }, [authUsername, isSyncing]);
 
+    // ─── Back up the full collection to our own database (manual, never automatic) ──
+    const handleBackfillArchive = useCallback(async () => {
+        if (archiving || !authUsername || releases.length === 0) return;
+        setArchiving(true);
+        setArchiveProgress(0);
+        try {
+            const saved = await backfillCollectionArchive(releases, authUsername, (done) => setArchiveProgress(done));
+            setArchiveStatus({ count: saved, lastUpdatedAt: new Date().toISOString() });
+        } catch (e) {
+            console.error('[SpinVinyl] Collection backup failed:', e);
+        } finally {
+            setArchiving(false);
+            setArchiveProgress(0);
+        }
+    }, [archiving, authUsername, releases]);
+
     // ─── Record a spin (local-first, synced across devices) ───────
     const handleSessionEnd = useCallback(async (sessionData) => {
         try {
@@ -1411,6 +1434,19 @@ export const SpinVinyl = () => {
                                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
                                         </span>
                                     )}
+                                    <span className="text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1.5 mt-1">
+                                        <span className="flex items-center gap-1">
+                                            <Database size={10} />
+                                            {archiveStatus ? `${archiveStatus.count} archived` : 'Not backed up yet'}
+                                        </span>
+                                        <button
+                                            onClick={handleBackfillArchive}
+                                            disabled={archiving || loading || releases.length === 0}
+                                            className="flex items-center gap-1 px-2 py-1 min-h-[26px] rounded-full bg-sky-400/10 hover:bg-sky-400/20 border border-sky-400/30 text-sky-300 normal-case tracking-normal font-semibold transition-colors disabled:opacity-60 active:opacity-70"
+                                        >
+                                            {archiving ? `Backing up ${archiveProgress}/${releases.length}…` : 'Back up to cloud'}
+                                        </button>
+                                    </span>
                                 </div>
                                 <button
                                     onClick={async () => {
@@ -1826,6 +1862,7 @@ export const SpinVinyl = () => {
                     folders={collectionFolders}
                     collectionFields={collectionFields}
                     onItemEdited={handleItemEdited}
+                    authUsername={authUsername}
                 />
             )}
 

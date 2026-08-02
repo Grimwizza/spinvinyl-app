@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera, Sparkles } from 'lucide-react';
 import CollectionItemEditor from './CollectionItemEditor';
+import { buildArchiveItem, pushArchiveItem } from '../lib/collectionArchive.js';
 
 // Module-level in-memory cache for barcode searches (persists across scanner mounts/unmounts)
 const barcodeCache = {};
@@ -457,36 +458,18 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         }
     };
 
-    // ── Save scanned/searched item to localStorage ───────────────────────────
-    const saveUpcLocally = (upc, release, formData) => {
-        try {
-            const existing = JSON.parse(localStorage.getItem('spinvinyl_scanned_upcs') || '[]');
-            existing.unshift({
-                upc: upc || null,
-                discogs_username: authUsername || null,
-                release_id:       String(release.id),
-                release_title:    release.title,
-                scanned_at:       new Date().toISOString(),
-                ...formData
-            });
-            localStorage.setItem('spinvinyl_scanned_upcs', JSON.stringify(existing));
-        } catch (e) {
-            console.warn('[BarcodeScanner] Failed to save UPC locally:', e);
-        }
-    };
-
     const handleSelectForEdit = (release) => {
         setSelectedRelease(release);
         setPhase('editDetails');
         setErrorMsg('');
     };
 
-    const handleItemSaved = (release) => {
-        const provenance = mode === 'search' ? { search_query: lastQuery }
-            : mode === 'matrix' ? { matrix_query: lastQuery }
-            : mode === 'photo'  ? { photo_query: lastQuery }
-            : {};
-        saveUpcLocally(mode === 'scan' ? barcode : null, release, provenance);
+    const handleItemSaved = (release, payload, data) => {
+        const provenance = mode === 'search' ? 'search' : mode === 'matrix' ? 'matrix' : mode === 'photo' ? 'photo' : 'scan';
+        const item = buildArchiveItem(release, { ...payload, instanceId: data?.instance_id }, {
+            provenance, provenanceQuery: lastQuery, barcode: mode === 'scan' ? barcode : null,
+        });
+        pushArchiveItem(item, authUsername);
         setAdded(prev => ({ ...prev, [release.id]: true }));
         clearCollectionCache?.();
         onAddSuccess?.(release.title);

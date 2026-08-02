@@ -4,7 +4,7 @@
 let _handlers = null;
 async function getHandlers() {
     if (_handlers) return _handlers;
-    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync, identify] = await Promise.all([
+    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync, identify, collectionArchive] = await Promise.all([
         import('./api/discogs.js'),
         import('./api/lyrics.js'),
         import('./api/releases.js'),
@@ -14,6 +14,7 @@ async function getHandlers() {
         import('./api/search-shops.js'),
         import('./api/sync.js'),
         import('./api/identify.js'),
+        import('./api/collection-archive.js'),
     ]);
     _handlers = {
         discogs: discogs.default,
@@ -25,6 +26,7 @@ async function getHandlers() {
         searchShops: searchShops.default,
         sync: sync.default,
         identify: identify.default,
+        collectionArchive: collectionArchive.default,
     };
     return _handlers;
 }
@@ -284,6 +286,24 @@ export const apiMiddleware = () => ({
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
                         h.sync(req, mockedRes).catch(reject);
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/collection-archive (personal collection archive) ---
+            if (url === '/collection-archive') {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        h.collectionArchive(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);
