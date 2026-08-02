@@ -692,7 +692,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             )}
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
                 <div>
                     <h2 className="text-base font-bold text-white">Upcoming Vinyl Releases</h2>
                     <p className="text-xs text-stone-500 mt-0.5">
@@ -700,10 +700,10 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                         {collectionLoading && <span className="ml-2 text-terracotta-400">Loading your collection…</span>}
                     </p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                     <button
                         onClick={() => setPanelOpen(o => !o)}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex-shrink-0 ${
                             panelOpen || customArtists.length > 0 || customGenres.length > 0
                                 ? 'bg-terracotta-500/20 border-terracotta-500/40 text-terracotta-300'
                                 : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'
@@ -714,14 +714,14 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     </button>
                     <button
                         onClick={() => setViewMode('list')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all flex-shrink-0 ${viewMode === 'list' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="List view"
                     >
                         <LayoutList size={14} />
                     </button>
                     <button
                         onClick={() => setViewMode('grid')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all flex-shrink-0 ${viewMode === 'grid' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="Tile view"
                     >
                         <LayoutGrid size={14} />
@@ -729,7 +729,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     <button
                         onClick={() => fetchUpcoming(true)}
                         disabled={loading}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all flex-shrink-0"
                         title="Refresh"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -1307,22 +1307,22 @@ const WantlistSection = () => {
                 />
             )}
 
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Your Wantlist</h2>
                     <p className="text-xs text-stone-500 mt-0.5">Records you've marked to complete your collection</p>
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                     <button
                         onClick={() => changeViewMode('list')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'list' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all flex-shrink-0 ${viewMode === 'list' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="List view"
                     >
                         <LayoutList size={14} />
                     </button>
                     <button
                         onClick={() => changeViewMode('grid')}
-                        className={`p-2 rounded-xl border transition-all ${viewMode === 'grid' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
+                        className={`p-2 rounded-xl border transition-all flex-shrink-0 ${viewMode === 'grid' ? 'bg-terracotta-500/20 border-terracotta-500/30 text-terracotta-300' : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'}`}
                         title="Tile view"
                     >
                         <LayoutGrid size={14} />
@@ -1330,7 +1330,7 @@ const WantlistSection = () => {
                     <button
                         onClick={() => fetchWantlist(true)}
                         disabled={loading}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all flex-shrink-0"
                         title="Refresh"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -1948,17 +1948,17 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                 />
             )}
 
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Complete Your Collection</h2>
                     <p className="text-xs text-stone-500 mt-0.5">Vinyl albums you don't own yet, by artists you collect</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
                     {/* Show complete toggle */}
                     <button
                         onClick={handleToggleShowComplete}
                         disabled={loadingExtra}
-                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex-shrink-0 ${
                             showComplete
                                 ? 'bg-green-500/15 border-green-500/30 text-green-400'
                                 : 'bg-white/5 border-white/10 text-stone-500 hover:text-stone-300'
@@ -1971,7 +1971,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     {/* Add artist search trigger */}
                     <button
                         onClick={() => setSearchOpen(o => !o)}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
+                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all flex-shrink-0 ${
                             searchOpen
                                 ? 'bg-terracotta-500/20 border-terracotta-500/40 text-terracotta-300'
                                 : 'bg-white/5 border-white/10 text-stone-400 hover:text-white'
@@ -1982,7 +1982,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     <select
                         value={sortBy}
                         onChange={e => setSortBy(e.target.value)}
-                        className="text-xs bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-stone-300 focus:outline-none focus:border-terracotta-500/50 cursor-pointer"
+                        className="text-xs bg-white/5 border border-white/10 rounded-xl px-2 py-1.5 text-stone-300 focus:outline-none focus:border-terracotta-500/50 cursor-pointer flex-shrink-0"
                     >
                         <option value="pct_desc">% Complete</option>
                         <option value="owned_desc">Albums Owned</option>
@@ -1992,7 +1992,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                     <button
                         onClick={() => fetchGaps(true)}
                         disabled={loading}
-                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all"
+                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-400 hover:text-white transition-all flex-shrink-0"
                         title="Refresh"
                     >
                         <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
@@ -2977,7 +2977,7 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
 
             {/* Sub-tab pills */}
             <div className="sticky top-[env(safe-area-inset-top,0px)] z-10 bg-stone-950/80 backdrop-blur-xl border-b border-white/5">
-                <div className="max-w-3xl mx-auto px-4 flex gap-1 py-2 overflow-x-auto no-scrollbar">
+                <div className="max-w-3xl mx-auto px-4 flex gap-1 py-2 overflow-x-auto no-scrollbar [mask-image:linear-gradient(to_right,black_92%,transparent_100%)]">
                     {TABS.map(tab => {
                         const isLocked = tab.requiresAuth && !isAuthenticated;
                         return (

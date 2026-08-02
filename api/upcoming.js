@@ -20,6 +20,16 @@ const CACHE_FILE = '/tmp/spinvinyl_upcoming_enriched.json';
 const ENRICH_LIMIT = 40;    // max releases to enrich per cycle
 const BATCH_SIZE = 5;       // parallel Discogs calls per batch
 const BATCH_DELAY_MS = 400; // pause between batches (respects ~25 req/min app-auth limit)
+// Overall wall-clock budget for a cold-cache request (scrape + enrich combined),
+// measured from requestStart. Vercel serverless functions have a hard execution
+// ceiling (10s on the Hobby tier) — the old unbounded design (scrape up to 10s,
+// then up to 8 enrichment batches at up to 6s each) could reach 50s+ worst case,
+// which reliably times out in production whenever the cache is cold, even though
+// it looks fine locally where a long-lived dev server keeps the cache warm.
+// Once this budget is exceeded, enrichment stops starting new batches and the
+// request returns whatever's already enriched plus the rest un-enriched —
+// degraded results beat a hard failure.
+const REQUEST_BUDGET_MS = 6000;
 
 // ─── In-memory cache (warm-container fast path) ───────────────────────────────
 let memCache = null; // { data: [...], fetchedAt: ISO string, fallback?: boolean }
@@ -56,7 +66,7 @@ async function enrichOne(release) {
         const url = `${DISCOGS_SEARCH}?q=${encodeURIComponent(q)}&type=release&format=Vinyl&per_page=3`;
         const res = await fetch(url, {
             headers: { Authorization: discogsAuth(), 'User-Agent': USER_AGENT },
-            signal: AbortSignal.timeout(6000),
+            signal: AbortSignal.timeout(3500),
         });
         if (!res.ok) return release;
         const data = await res.json();
@@ -75,12 +85,19 @@ async function enrichOne(release) {
 }
 
 // ─── Batch enrichment with rate-limit awareness ───────────────────────────────
-async function enrichReleases(releases) {
+// requestStart anchors the shared wall-clock budget (see REQUEST_BUDGET_MS) —
+// stops starting new batches once time is running out, rather than pushing the
+// whole request past the platform's function timeout.
+async function enrichReleases(releases, requestStart) {
     const toEnrich = releases.slice(0, ENRICH_LIMIT);
     const rest = releases.slice(ENRICH_LIMIT);
     const enriched = [];
 
     for (let i = 0; i < toEnrich.length; i += BATCH_SIZE) {
+        if (Date.now() - requestStart > REQUEST_BUDGET_MS) {
+            console.warn(`[Upcoming Vinyl] Enrichment budget exceeded — stopping early at ${i}/${toEnrich.length}`);
+            return [...enriched, ...toEnrich.slice(i), ...rest];
+        }
         const batch = toEnrich.slice(i, i + BATCH_SIZE);
         const results = await Promise.all(batch.map(enrichOne));
         enriched.push(...results);
@@ -206,7 +223,7 @@ async function fetchDiscogsNewVinyl() {
     try {
         const res = await fetch(url, {
             headers: { Authorization: discogsAuth(), 'User-Agent': USER_AGENT },
-            signal: AbortSignal.timeout(10000),
+            signal: AbortSignal.timeout(5000),
         });
         if (!res.ok) return [];
         const data = await res.json();
@@ -276,6 +293,7 @@ export default async function handler(req, res) {
     // ── 3. Cache miss: scrape + enrich ────────────────────────────────────────
     try {
         res.setHeader('X-Cache', 'MISS');
+        const requestStart = Date.now();
 
         let scraped = [];
         let isFallback = false;
@@ -285,7 +303,7 @@ export default async function handler(req, res) {
         try {
             const htmlRes = await fetch(UPCOMING_URL, {
                 headers: { 'User-Agent': USER_AGENT, Accept: 'text/html,application/xhtml+xml' },
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(5000),
             });
             if (!htmlRes.ok) throw new Error(`HTTP ${htmlRes.status} from upcomingvinyl.com`);
             scraped = scrapeHTML(await htmlRes.text());
@@ -305,7 +323,7 @@ export default async function handler(req, res) {
 
         // Enrich with Discogs artwork + genres (skip if already from Discogs fallback)
         const enriched = (!isFallback && process.env.DISCOGS_CONSUMER_KEY && process.env.DISCOGS_CONSUMER_SECRET)
-            ? await enrichReleases(scraped)
+            ? await enrichReleases(scraped, requestStart)
             : scraped;
 
         const fetchedAt = new Date().toISOString();
