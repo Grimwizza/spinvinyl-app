@@ -8,6 +8,7 @@ import StatsPage from './StatsPage.jsx';
 import ReleasesPage from './ReleasesPage.jsx';
 import BarcodeScanner from '../components/BarcodeScanner.jsx';
 import RecommendWidget from '../components/RecommendWidget.jsx';
+import AccountSheet from '../components/AccountSheet.jsx';
 import CrateView from '../components/CrateView.jsx';
 import AlphaNav, { SectionDivider, groupByLetter, isAlphaSort } from '../components/AlphaNav.jsx';
 import CollectionItemEditor from '../components/CollectionItemEditor.jsx';
@@ -978,6 +979,7 @@ export const SpinVinyl = () => {
     // ─── Scanning / Stats State ────────────────────────────────────
     const [activePage, setActivePage] = useState('collection'); // 'collection' | 'stats' | 'releases'
     const [showScanner, setShowScanner] = useState(false);
+    const [showAccountSheet, setShowAccountSheet] = useState(false);
     const [collectionFolders, setCollectionFolders] = useState([]);
     const [collectionFields, setCollectionFields] = useState(null);
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
@@ -1217,6 +1219,22 @@ export const SpinVinyl = () => {
         return () => window.removeEventListener('online', handleOnline);
     }, [authUsername]);
 
+    // ─── Periodically retry the offline sync queue while anything is pending ──
+    // Complements the 'online' listener above (which fires immediately on
+    // reconnect) for cases that don't trip a browser online/offline transition,
+    // e.g. a transient server-side error while the connection itself is fine.
+    // Hits our own Supabase, not Discogs, so this carries none of the API-cost
+    // concerns that motivated removing other auto-run background jobs.
+    useEffect(() => {
+        if (!authUsername || offlineQueueSize === 0) return;
+        const interval = setInterval(() => {
+            flushOfflineQueue(authUsername).then(() => {
+                setOfflineQueueSize(getOfflineQueue().length);
+            });
+        }, 60000);
+        return () => clearInterval(interval);
+    }, [authUsername, offlineQueueSize]);
+
     // ─── Manual sync retry (e.g. after a failed background push) ──
     const handleManualSync = useCallback(async () => {
         if (isSyncing || !authUsername) return;
@@ -1246,6 +1264,15 @@ export const SpinVinyl = () => {
             setArchiveProgress(0);
         }
     }, [archiving, authUsername, releases]);
+
+    // ─── Log out (extracted so it can be shared by the compact account row → AccountSheet) ──
+    const handleLogout = useCallback(async () => {
+        await fetch('/api/discogs?action=logout');
+        clearCollectionCache();
+        setIsAuthenticated(false);
+        setReleases([]);
+        setTotalItems(0);
+    }, []);
 
     // ─── Record a spin (local-first, synced across devices) ───────
     const handleSessionEnd = useCallback(async (sessionData) => {
@@ -1410,57 +1437,16 @@ export const SpinVinyl = () => {
                             </div>
                         </div>
 
-                        {/* Profile / Logout / Random */}
+                        {/* Profile / Account / Scan */}
                         <div className="flex flex-col items-center sm:items-end gap-3 w-full sm:w-auto">
-                            <div className="flex items-center justify-center sm:justify-end gap-3 w-full">
-                                <div className="flex flex-col items-end border-l border-white/10 pl-3">
-                                    <span className="text-sm font-bold text-white max-w-[120px] truncate">{authUsername}</span>
-                                    {offlineQueueSize > 0 ? (
-                                        <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
-                                            <span className="flex items-center gap-1">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div> {offlineQueueSize} unsynced
-                                            </span>
-                                            <button
-                                                onClick={handleManualSync}
-                                                disabled={isSyncing}
-                                                className="flex items-center gap-1 px-2 py-1 min-h-[26px] rounded-full bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-300 normal-case tracking-normal font-semibold transition-colors disabled:opacity-60 active:opacity-70"
-                                            >
-                                                <RefreshCw size={10} className={isSyncing ? 'animate-spin' : ''} />
-                                                {isSyncing ? 'Syncing…' : 'Sync now'}
-                                            </button>
-                                        </span>
-                                    ) : (
-                                        <span className="text-[10px] uppercase tracking-wider text-green-400 font-bold flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Connected
-                                        </span>
-                                    )}
-                                    <span className="text-[10px] uppercase tracking-wider text-stone-400 font-bold flex items-center gap-1.5 mt-1">
-                                        <span className="flex items-center gap-1">
-                                            <Database size={10} />
-                                            {archiveStatus ? `${archiveStatus.count} archived` : 'Not backed up yet'}
-                                        </span>
-                                        <button
-                                            onClick={handleBackfillArchive}
-                                            disabled={archiving || loading || releases.length === 0}
-                                            className="flex items-center gap-1 px-2 py-1 min-h-[26px] rounded-full bg-sky-400/10 hover:bg-sky-400/20 border border-sky-400/30 text-sky-300 normal-case tracking-normal font-semibold transition-colors disabled:opacity-60 active:opacity-70"
-                                        >
-                                            {archiving ? `Backing up ${archiveProgress}/${releases.length}…` : 'Back up to cloud'}
-                                        </button>
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={async () => {
-                                        await fetch('/api/discogs?action=logout');
-                                        clearCollectionCache();
-                                        setIsAuthenticated(false);
-                                        setReleases([]);
-                                        setTotalItems(0);
-                                    }}
-                                    className="p-2 px-4 sm:py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-xs font-semibold text-stone-300 transition-colors"
-                                >
-                                    <span>Log Out</span>
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => setShowAccountSheet(true)}
+                                className="flex items-center gap-2 border-l border-white/10 pl-3 py-1 -my-1 rounded-r-lg hover:bg-white/5 transition-colors active:opacity-70"
+                            >
+                                <span className="text-sm font-bold text-white max-w-[120px] truncate">{authUsername}</span>
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${offlineQueueSize > 0 ? 'bg-amber-400' : 'bg-green-500'}`} />
+                                <ChevronDown size={14} className="text-stone-500" />
+                            </button>
 
                             {/* Scan Record */}
                             <button
@@ -1879,6 +1865,22 @@ export const SpinVinyl = () => {
                     }}
                 />
             )}
+
+            <AccountSheet
+                isOpen={showAccountSheet}
+                onClose={() => setShowAccountSheet(false)}
+                authUsername={authUsername}
+                offlineQueueSize={offlineQueueSize}
+                isSyncing={isSyncing}
+                onSync={handleManualSync}
+                archiveStatus={archiveStatus}
+                archiving={archiving}
+                archiveProgress={archiveProgress}
+                totalReleases={releases.length}
+                canArchive={!loading && releases.length > 0}
+                onBackfillArchive={handleBackfillArchive}
+                onLogout={handleLogout}
+            />
 
             {/* Guest sign-in bottom sheet */}
             {showGuestModal && (
