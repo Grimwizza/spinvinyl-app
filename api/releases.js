@@ -1,8 +1,41 @@
 // ─── Vinyl Releases — RSS News Feed Aggregator ────────────────────────────
 // Fetches and parses RSS from vinyl / music journalism sources.
 // No external dependencies — pure XML regex parsing.
+//
+// Cache strategy (dual-layer, mirrors api/upcoming.js):
+//   1. Module-level in-memory object — zero-latency for warm container hits
+//   2. /tmp file — survives container restarts within the same Vercel instance
+//
+// TTL = 2h — news feeds post a handful of times a day, not continuously, and
+// this is plain RSS text (no Discogs ToS freshness constraint applies here).
+
+import { readFile, writeFile } from 'fs/promises';
 
 const USER_AGENT = 'SpinVinyl/1.0 +https://spinvinyl.app';
+const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const CACHE_FILE = '/tmp/spinvinyl_releases_news.json';
+
+// ─── In-memory cache (warm-container fast path) ───────────────────────────────
+let memCache = null; // { data: { articles, errors }, fetchedAt: ISO string }
+
+const isFresh = (fetchedAt) =>
+    fetchedAt && (Date.now() - new Date(fetchedAt).getTime()) < CACHE_TTL_MS;
+
+// ─── /tmp file cache (survives container restarts) ────────────────────────────
+async function readFileCache() {
+    try {
+        const raw = await readFile(CACHE_FILE, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (isFresh(parsed.fetchedAt)) return parsed;
+    } catch { /* miss */ }
+    return null;
+}
+
+async function writeFileCache(payload) {
+    try {
+        await writeFile(CACHE_FILE, JSON.stringify(payload));
+    } catch { /* non-fatal — in-memory cache still works */ }
+}
 
 // ─── XML / RSS Helpers ────────────────────────────────────────────
 
@@ -116,6 +149,23 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid action. Use action=news' });
     }
 
+    // ── 1. In-memory cache (fastest) ─────────────────────────────────────────
+    if (memCache && isFresh(memCache.fetchedAt)) {
+        res.setHeader('X-Cache', 'HIT-MEMORY');
+        return res.status(200).json(memCache.data);
+    }
+
+    // ── 2. /tmp file cache (survives warm restarts) ───────────────────────────
+    const fileCached = await readFileCache();
+    if (fileCached) {
+        memCache = fileCached;
+        res.setHeader('X-Cache', 'HIT-FILE');
+        return res.status(200).json(fileCached.data);
+    }
+
+    // ── 3. Cache miss: fetch all feeds ────────────────────────────────────────
+    res.setHeader('X-Cache', 'MISS');
+
     const articles = [];
     const errors = [];
 
@@ -144,5 +194,9 @@ export default async function handler(req, res) {
         .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
         .slice(0, 54); // 9 sources × 8 items = 72 → trim to 54 newest
 
-    return res.status(200).json({ articles: deduped, errors });
+    const payload = { data: { articles: deduped, errors }, fetchedAt: new Date().toISOString() };
+    memCache = payload;
+    await writeFileCache(payload);
+
+    return res.status(200).json(payload.data);
 }

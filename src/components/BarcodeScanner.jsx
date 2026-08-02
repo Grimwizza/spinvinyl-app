@@ -1,23 +1,82 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera, Sparkles } from 'lucide-react';
 import CollectionItemEditor from './CollectionItemEditor';
 
 // Module-level in-memory cache for barcode searches (persists across scanner mounts/unmounts)
 const barcodeCache = {};
+
+// Lightweight relevance nudge on top of Discogs' own search ranking — not a full
+// re-sort. Boosts standard full-length vinyl pressings (LP/Album) slightly above
+// singles/EPs/box sets/promos, using a stable sort so ties keep Discogs' original order.
+const FORMAT_SCORE = { LP: 2, Album: 1, Single: -1, EP: -1, 'Box Set': -1, Promo: -2, Unofficial: -3, Test: -2 };
+function scoreResultFormat(r) {
+    return (r.format || []).reduce((score, f) => score + (FORMAT_SCORE[f] || 0), 0);
+}
+
+const CAMERA_CONSTRAINTS = {
+    video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+    },
+};
+const BARCODE_FORMATS = ['upc_a', 'upc_e', 'ean_13', 'ean_8'];
+
+// Native Shape Detection API — decodes without any JS/WASM overhead where available
+// (Chrome/Edge 83+, Safari 17+). Firefox lacks it entirely, so this is always a
+// feature-detected upgrade over @zxing/browser, never a hard requirement.
+async function isNativeBarcodeDetectorViable() {
+    if (!('BarcodeDetector' in window)) return false;
+    try {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        return BARCODE_FORMATS.some(f => formats.includes(f));
+    } catch {
+        return false;
+    }
+}
+
+// Downscale a captured photo before sending it to /api/identify — phone camera photos
+// can be several MB; this keeps payload size (and Anthropic API cost) small while
+// preserving enough detail to read cover/label text.
+function downscaleImageToDataUrl(file, { maxDim = 1280, quality = 0.8 } = {}) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let { width, height } = img;
+            if (width > maxDim || height > maxDim) {
+                const scale = maxDim / Math.max(width, height);
+                width = Math.round(width * scale);
+                height = Math.round(height * scale);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = url;
+    });
+}
 
 // ─── BarcodeScanner ───────────────────────────────────────────────────────────
 // Uses @zxing/browser BrowserMultiFormatReader for live camera UPC scanning.
 // Works on iOS Safari (14.3+) AND Android Chrome via getUserMedia + canvas decoding.
 // Also supports a manual title/artist text search for records with no barcode at all.
 export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionCache, authUsername }) {
-    const videoRef      = useRef(null);
-    const controlsRef   = useRef(null);   // ZXing IScannerControls { stop() }
-    const hasScannedRef = useRef(false);  // Guard: prevent double-firing searchByBarcode
-    const isMountedRef  = useRef(true);
+    const videoRef         = useRef(null);
+    const controlsRef      = useRef(null);   // ZXing IScannerControls { stop() }
+    const hasScannedRef    = useRef(false);  // Guard: prevent double-firing searchByBarcode
+    const isMountedRef     = useRef(true);
+    const activeDecoderRef = useRef(null);   // 'native' | 'zxing' | null — which backend currently owns the stream
+    const rafIdRef         = useRef(null);   // requestAnimationFrame id for the native polling loop
+    const photoInputRef    = useRef(null);   // hidden <input type=file> for AI cover-photo capture
 
-    // 'init' | 'scanning' | 'searchInput' | 'searching' | 'results' | 'empty' | 'error' | 'unsupported' | 'editDetails'
+    // 'init' | 'scanning' | 'searchInput' | 'identifying' | 'searching' | 'results' | 'empty' | 'error' | 'unsupported' | 'editDetails'
     const [phase, setPhase]             = useState('init');
-    const [mode, setMode]               = useState('scan'); // 'scan' | 'search' — which entry point is active
+    const [mode, setMode]               = useState('scan'); // 'scan' | 'search' | 'matrix' | 'photo' — which entry point is active
     const [barcode, setBarcode]         = useState('');
     const [manualInput, setManualInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -84,6 +143,12 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     }, []);
 
     const stopCamera = () => {
+        if (rafIdRef.current) {
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = null;
+        }
+        activeDecoderRef.current = null;
+
         if (controlsRef.current) {
             try { controlsRef.current.stop(); } catch { /* ignore */ }
             controlsRef.current = null;
@@ -171,50 +236,100 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         }
     }, []);
 
-    // ── Live scanning via @zxing/browser ─────────────────────────────────────
+    // ── Live scanning: native BarcodeDetector (near-instant, zero JS/WASM overhead)
+    // where the browser supports it, falling back to @zxing/browser everywhere else
+    // (Firefox, older Safari/Chrome). Both paths share the same hasScannedRef guard
+    // and error-message mapping in startLiveScanning below.
+
+    // Fallback path — ZXing owns the video element's stream, no separate getUserMedia needed.
     // Dynamic import keeps ZXing (~500 KB) out of the initial app bundle.
-    // ZXing owns the video element's stream — no separate getUserMedia or video.play() needed.
+    const startZxingScanning = useCallback(async () => {
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const { NotFoundException } = await import('@zxing/library');
+        const reader = new BrowserMultiFormatReader();
+
+        setPhase('scanning');
+
+        const controls = await reader.decodeFromConstraints(
+            CAMERA_CONSTRAINTS,
+            videoRef.current,
+            (result, err) => {
+                if (result && !hasScannedRef.current) {
+                    hasScannedRef.current = true;
+                    searchByBarcode(result.getText());
+                }
+                // NotFoundException fires every frame when no barcode is visible — this is normal, ignore it
+                if (err && !(err instanceof NotFoundException)) {
+                    console.warn('[BarcodeScanner] ZXing decode error:', err);
+                }
+            }
+        );
+
+        // The scanner may have been closed (or "Search" tapped) while the camera was still
+        // starting up — if so, stop the stream immediately instead of leaving it running.
+        if (!isMountedRef.current) {
+            try { controls.stop(); } catch { /* ignore */ }
+            return;
+        }
+
+        controlsRef.current = controls;
+        activeDecoderRef.current = 'zxing';
+    }, [searchByBarcode]);
+
+    // Native path — BarcodeDetector is a low-level decoder, not a stream owner, so this
+    // acquires the camera directly and polls frames via a self-chained requestAnimationFrame
+    // loop (the next frame is only scheduled once the current detect() resolves, so calls
+    // never overlap/queue up).
+    const startNativeScanning = useCallback(async () => {
+        const stream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
+
+        if (!isMountedRef.current) {
+            stream.getTracks().forEach(t => { try { t.stop(); } catch { /* ignore */ } });
+            return;
+        }
+
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+
+        activeDecoderRef.current = 'native';
+        setPhase('scanning');
+
+        const detector = new window.BarcodeDetector({ formats: BARCODE_FORMATS });
+
+        const tick = async () => {
+            // A stale tick scheduled before a mode-switch/unmount/rescan is a no-op.
+            if (!isMountedRef.current || activeDecoderRef.current !== 'native') return;
+            try {
+                if (videoRef.current.readyState >= 2) { // HAVE_CURRENT_DATA — frame is decodable
+                    const codes = await detector.detect(videoRef.current);
+                    if (codes.length > 0 && !hasScannedRef.current) {
+                        hasScannedRef.current = true;
+                        searchByBarcode(codes[0].rawValue); // calls stopCamera() internally
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('[BarcodeScanner] BarcodeDetector decode error:', e);
+            }
+            rafIdRef.current = requestAnimationFrame(tick);
+        };
+        rafIdRef.current = requestAnimationFrame(tick);
+    }, [searchByBarcode]);
+
     const startLiveScanning = useCallback(async () => {
         hasScannedRef.current = false;
         setPhase('init');
 
         try {
-            const { BrowserMultiFormatReader } = await import('@zxing/browser');
-            const { NotFoundException } = await import('@zxing/library');
-            const reader = new BrowserMultiFormatReader();
-
-            setPhase('scanning');
-
-            const controls = await reader.decodeFromConstraints(
-                {
-                    video: {
-                        facingMode: { ideal: 'environment' },
-                        width:  { ideal: 1280 },
-                        height: { ideal: 720 },
-                    },
-                },
-                videoRef.current,
-                (result, err) => {
-                    if (result && !hasScannedRef.current) {
-                        hasScannedRef.current = true;
-                        searchByBarcode(result.getText());
-                    }
-                    // NotFoundException fires every frame when no barcode is visible — this is normal, ignore it
-                    if (err && !(err instanceof NotFoundException)) {
-                        console.warn('[BarcodeScanner] ZXing decode error:', err);
-                    }
-                }
-            );
-
-            // The scanner may have been closed (or "Search" tapped) while the camera was still
-            // starting up — if so, stop the stream immediately instead of leaving it running.
-            if (!isMountedRef.current) {
-                try { controls.stop(); } catch { /* ignore */ }
-                return;
+            const useNative = await isNativeBarcodeDetectorViable();
+            if (useNative) {
+                await startNativeScanning();
+            } else {
+                await startZxingScanning();
             }
-
-            controlsRef.current = controls;
         } catch (e) {
+            // Both paths' getUserMedia (native calls it directly; ZXing calls it internally)
+            // throw the same DOMException names, so one mapping covers both backends.
             const msgs = {
                 NotAllowedError:      'Camera permission denied. Allow camera access in your browser settings, or enter the barcode manually below.',
                 PermissionDeniedError: 'Camera permission denied. Allow camera access in your browser settings, or enter the barcode manually below.',
@@ -227,7 +342,15 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             setErrorMsg(msgs[e.name] || `Could not start camera: ${e.message}`);
             setPhase('unsupported');
         }
-    }, [searchByBarcode]);
+    }, [startNativeScanning, startZxingScanning]);
+
+    // Auto-start the camera when the scanner first opens (it always mounts in 'scan' mode).
+    // Without this, `phase` sits at its initial 'init' value forever — nothing else kicks
+    // off `startLiveScanning`, so the modal just shows the loading spinner indefinitely.
+    useEffect(() => {
+        startLiveScanning();
+        return () => stopCamera();
+    }, [startLiveScanning]);
 
     const handleRescan = () => {
         setBarcode('');
@@ -278,6 +401,62 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         setResults([]);
     };
 
+    // Trigger the native camera-app/photo-library picker for AI cover identification.
+    // Deliberately does not touch getUserMedia — see plan notes on capture mechanism.
+    const handleShowPhoto = () => {
+        stopCamera();
+        setMode('photo');
+        setErrorMsg('');
+        setResults([]);
+        photoInputRef.current?.click();
+    };
+
+    const handlePhotoFileChange = async (e) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // allow re-selecting the identical file next time
+        if (!file) {
+            // User cancelled the picker — return to a clean, recoverable state
+            handleShowScan();
+            return;
+        }
+
+        setMode('photo');
+        setPhase('identifying');
+        setErrorMsg('');
+
+        try {
+            const dataUrl = await downscaleImageToDataUrl(file, { maxDim: 1280, quality: 0.8 });
+            const res  = await fetch('/api/identify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: dataUrl }),
+            });
+            const data = await res.json();
+            if (!isMountedRef.current) return;
+            if (!res.ok) throw new Error(data.error || 'Identify failed');
+
+            const { artist, title } = data;
+            if (artist && title) {
+                // Confident extraction — go straight to the existing results flow
+                const query = `${artist} ${title}`;
+                setSearchQuery(query);
+                await searchByText(query);
+            } else {
+                // Partial or unusable extraction — fall back to manual search, pre-filled
+                const partial = [artist, title].filter(Boolean).join(' ');
+                setMode('search');
+                setPhase('searchInput');
+                setSearchQuery(partial);
+            }
+        } catch (err) {
+            if (!isMountedRef.current) return;
+            console.warn('[BarcodeScanner] Photo identify failed:', err);
+            setMode('search');
+            setPhase('searchInput');
+            setSearchQuery('');
+        }
+    };
+
     // ── Save scanned/searched item to localStorage ───────────────────────────
     const saveUpcLocally = (upc, release, formData) => {
         try {
@@ -305,6 +484,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const handleItemSaved = (release) => {
         const provenance = mode === 'search' ? { search_query: lastQuery }
             : mode === 'matrix' ? { matrix_query: lastQuery }
+            : mode === 'photo'  ? { photo_query: lastQuery }
             : {};
         saveUpcLocally(mode === 'scan' ? barcode : null, release, provenance);
         setAdded(prev => ({ ...prev, [release.id]: true }));
@@ -317,8 +497,16 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
         setTimeout(() => setLastAdded(null), 1800);
         if (mode === 'search') handleShowSearch();
         else if (mode === 'matrix') handleShowMatrix();
+        else if (mode === 'photo') handleShowPhoto();
         else handleShowScan();
     };
+
+    const sortedResults = useMemo(() => {
+        return results
+            .map((r, i) => ({ r, i, score: scoreResultFormat(r) }))
+            .sort((a, b) => b.score - a.score || a.i - b.i) // stable: ties preserve Discogs' order
+            .map(({ r }) => r);
+    }, [results]);
 
     const isPreResults    = ['init', 'scanning', 'searchInput'].includes(phase);
     const isSearchInput   = phase === 'searchInput';
@@ -379,6 +567,14 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         >
                             Matrix
                         </button>
+                        <button
+                            onClick={handleShowPhoto}
+                            aria-label="Identify by photo"
+                            title="Identify by photo"
+                            className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${mode === 'photo' ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30' : 'text-stone-500 border border-transparent hover:text-terracotta-300'}`}
+                        >
+                            <Sparkles size={13} />
+                        </button>
                     </div>
                 </div>
                 <button
@@ -390,6 +586,15 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                 </button>
             </div>
             )}
+
+            <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoFileChange}
+                className="hidden"
+            />
 
             {/* ── Brief "Added ✓" confirmation while continuing to scan/search ── */}
             {lastAdded && !isEditDetails && (
@@ -489,6 +694,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                         <div className="flex-1 min-w-0 pr-3">
                             {(barcode || lastQuery) && <p className="text-[10px] text-stone-600 font-mono tracking-wider truncate">{barcode || lastQuery}</p>}
                             <p className="text-sm font-medium text-stone-300">
+                                {phase === 'identifying' && 'Reading the cover…'}
                                 {phase === 'searching' && 'Searching Discogs…'}
                                 {phase === 'results' && `${results.length} release${results.length !== 1 ? 's' : ''} found`}
                                 {phase === 'empty' && 'No Discogs match found'}
@@ -497,10 +703,10 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                             </p>
                         </div>
                         <button
-                            onClick={mode === 'search' ? handleShowSearch : mode === 'matrix' ? handleShowMatrix : handleRescan}
+                            onClick={mode === 'search' ? handleShowSearch : mode === 'matrix' ? handleShowMatrix : mode === 'photo' ? handleShowPhoto : handleRescan}
                             className="text-xs text-terracotta-400 font-bold px-3 py-2 min-h-[44px] min-w-[70px] rounded-xl bg-terracotta-500/10 border border-terracotta-500/20 active:opacity-70 flex-shrink-0"
                         >
-                            {mode === 'search' || mode === 'matrix' ? 'Search Again' : 'Rescan'}
+                            {mode === 'search' || mode === 'matrix' ? 'Search Again' : mode === 'photo' ? 'Retake Photo' : 'Rescan'}
                         </button>
                     </div>
                 )}
@@ -510,7 +716,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             {!isPreResults && (
                 <div className="bg-stone-950 flex flex-col flex-1 overflow-hidden">
 
-                    {phase === 'searching' && (
+                    {(phase === 'searching' || phase === 'identifying') && (
                         <div className="flex items-center justify-center py-12">
                             <Loader2 size={28} className="text-terracotta-400 animate-spin" />
                         </div>
@@ -519,9 +725,11 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                     {/* Results list */}
                     {phase === 'results' && (
                         <div className="overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-                            {results.map(r => {
+                            {sortedResults.map((r, idx) => {
                                 const isAdded  = added[r.id];
                                 const thumb    = (r.cover_image && !r.cover_image.includes('spacer')) ? r.cover_image : null;
+                                const isBest   = idx === 0 && sortedResults.length > 1;
+                                const badges   = [r.year, r.country, (r.format || []).slice(0, 2).join('/')].filter(Boolean);
                                 return (
                                     <div key={r.id} className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.04]">
                                         {thumb ? (
@@ -532,10 +740,19 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                                             </div>
                                         )}
                                         <div className="flex-1 min-w-0">
+                                            {isBest && (
+                                                <span className="inline-block text-[9px] font-bold uppercase tracking-wide text-terracotta-300 bg-terracotta-500/15 border border-terracotta-500/25 rounded px-1.5 py-0.5 mb-1">
+                                                    Best match
+                                                </span>
+                                            )}
                                             <p className="text-white text-sm font-semibold leading-snug line-clamp-2">{r.title}</p>
-                                            <p className="text-stone-500 text-xs mt-0.5">
-                                                {[r.year, r.country, (r.format || []).slice(0, 2).join('/')].filter(Boolean).join(' · ')}
-                                            </p>
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {badges.map((b, i) => (
+                                                    <span key={i} className="text-[10px] text-stone-400 bg-white/5 rounded px-1.5 py-0.5">
+                                                        {b}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </div>
                                         <button
                                             onClick={() => !isAdded && handleSelectForEdit(r)}
@@ -599,13 +816,25 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
                             >
                                 No barcode? Search by title instead
                             </button>
+                            <button
+                                onClick={handleShowPhoto}
+                                className="text-xs text-stone-500 hover:text-terracotta-300 transition-colors text-center"
+                            >
+                                Can&rsquo;t find it? Snap the cover instead
+                            </button>
                         </div>
                     )}
 
                     {/* Empty / Error — search/matrix mode: let the user try a different query */}
                     {(phase === 'empty' || phase === 'error') && (mode === 'search' || mode === 'matrix') && (
-                        <div className="px-4 pt-4 pb-6">
+                        <div className="px-4 pt-4 pb-6 flex flex-col gap-3">
                             <p className="text-xs text-stone-500 text-center">Try a different search, or switch to Scan to use the camera.</p>
+                            <button
+                                onClick={handleShowPhoto}
+                                className="text-xs text-terracotta-400 font-bold text-center"
+                            >
+                                Snap the cover instead
+                            </button>
                         </div>
                     )}
                 </div>

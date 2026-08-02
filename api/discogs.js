@@ -361,7 +361,7 @@ export default async function handler(req, res) {
             // Search Discogs by UPC/EAN barcode — used by the in-app scanner
             const barcode = url.searchParams.get('barcode') || req.query?.barcode || '';
             if (!barcode) return res.status(400).json({ error: 'Missing barcode' });
-            apiUrl = `${DISCOGS_BASE}/database/search?barcode=${encodeURIComponent(barcode)}&per_page=10`;
+            apiUrl = `${DISCOGS_BASE}/database/search?barcode=${encodeURIComponent(barcode)}&format=Vinyl&per_page=10`;
             break;
         }
         case 'searchByText': {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle} from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle, RefreshCw} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
 import { fetchReleasePrice } from '../lib/priceCache.js';
@@ -978,6 +978,7 @@ export const SpinVinyl = () => {
     const [collectionFolders, setCollectionFolders] = useState([]);
     const [collectionFields, setCollectionFields] = useState(null);
     const [offlineQueueSize, setOfflineQueueSize] = useState(() => getOfflineQueue().length);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [, setStatsVersion] = useState(0); // bumped to force a re-render after logging a spin, so RecommendWidget's albumPlayCounts prop actually refreshes
 
     const currentSort = SORT_OPTIONS.find(s => s.value === sortBy) || SORT_OPTIONS[0];
@@ -1209,6 +1210,20 @@ export const SpinVinyl = () => {
         return () => window.removeEventListener('online', handleOnline);
     }, [authUsername]);
 
+    // ─── Manual sync retry (e.g. after a failed background push) ──
+    const handleManualSync = useCallback(async () => {
+        if (isSyncing || !authUsername) return;
+        setIsSyncing(true);
+        try {
+            await flushOfflineQueue(authUsername);
+        } catch (e) {
+            console.error('[SpinVinyl] Manual sync error:', e);
+        } finally {
+            setOfflineQueueSize(getOfflineQueue().length);
+            setIsSyncing(false);
+        }
+    }, [authUsername, isSyncing]);
+
     // ─── Record a spin (local-first, synced across devices) ───────
     const handleSessionEnd = useCallback(async (sessionData) => {
         try {
@@ -1378,8 +1393,18 @@ export const SpinVinyl = () => {
                                 <div className="flex flex-col items-end border-l border-white/10 pl-3">
                                     <span className="text-sm font-bold text-white max-w-[120px] truncate">{authUsername}</span>
                                     {offlineQueueSize > 0 ? (
-                                        <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div> {offlineQueueSize} unsynced
+                                        <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
+                                            <span className="flex items-center gap-1">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div> {offlineQueueSize} unsynced
+                                            </span>
+                                            <button
+                                                onClick={handleManualSync}
+                                                disabled={isSyncing}
+                                                className="flex items-center gap-1 px-2 py-1 min-h-[26px] rounded-full bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-300 normal-case tracking-normal font-semibold transition-colors disabled:opacity-60 active:opacity-70"
+                                            >
+                                                <RefreshCw size={10} className={isSyncing ? 'animate-spin' : ''} />
+                                                {isSyncing ? 'Syncing…' : 'Sync now'}
+                                            </button>
                                         </span>
                                     ) : (
                                         <span className="text-[10px] uppercase tracking-wider text-green-400 font-bold flex items-center gap-1">
@@ -1418,7 +1443,7 @@ export const SpinVinyl = () => {
                 {/* Main Content */}
                 <div className="max-w-7xl mx-auto px-3 sm:px-6 pb-32">
                     {/* Toolbar — single row on mobile */}
-                    <div className="sticky top-[env(safe-area-inset-top,0px)] z-30 py-3 sm:py-4 bg-stone-950/90 backdrop-blur-xl border-b border-white/5 -mx-3 sm:-mx-6 px-3 sm:px-6 mb-4 sm:mb-8">
+                    <div id="collection-toolbar" className="sticky top-[env(safe-area-inset-top,0px)] z-30 py-3 sm:py-4 bg-stone-950/90 backdrop-blur-xl border-b border-white/5 -mx-3 sm:-mx-6 px-3 sm:px-6 mb-4 sm:mb-8">
                         <div className="flex items-center gap-2">
                             {/* Search */}
                             <div className="relative flex-1 min-w-0">
@@ -1750,7 +1775,7 @@ export const SpinVinyl = () => {
 
             {/* ─── Bottom Navigation ──────────────────────────── */}
             {/* pb-[env(safe-area-inset-bottom)] pads for iPhone home indicator + Android nav bar */}
-            <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-stone-950/95 backdrop-blur-xl border-t border-white/10 pb-[env(safe-area-inset-bottom,0px)]">
+            <nav id="bottom-nav" className="fixed bottom-0 left-0 right-0 z-[100] bg-stone-950/95 backdrop-blur-xl border-t border-white/10 pb-[env(safe-area-inset-bottom,0px)]">
                 <div className="flex items-stretch max-w-lg mx-auto h-[60px]">
                     {[
                         { id: 'collection', label: 'Collection', icon: Disc, requiresAuth: true },

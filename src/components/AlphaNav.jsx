@@ -49,6 +49,40 @@ export default function AlphaNav({ items, sortField, sortOrder, onJumpToLetter, 
     const [activeLetter, setActiveLetter] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
     const [dragLetter, setDragLetter] = useState(null);
+    const [railBounds, setRailBounds] = useState(null);
+
+    // Keep the rail clear of the sticky toolbar above and the bottom nav below,
+    // so it never covers the Scan Record / view-toggle buttons on short viewports.
+    useEffect(() => {
+        const toolbar = document.getElementById('collection-toolbar');
+        const bottomNav = document.getElementById('bottom-nav');
+        if (!toolbar || !bottomNav) return;
+
+        const measure = () => {
+            const toolbarRect = toolbar.getBoundingClientRect();
+            const navRect = bottomNav.getBoundingClientRect();
+            setRailBounds({
+                top: Math.max(toolbarRect.bottom + 8, 8),
+                bottom: Math.max(window.innerHeight - navRect.top + 8, 8),
+            });
+        };
+
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(toolbar);
+        ro.observe(bottomNav);
+        window.addEventListener('scroll', measure, { passive: true });
+        window.addEventListener('resize', measure);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('scroll', measure);
+            window.removeEventListener('resize', measure);
+        };
+    }, []);
+
+    const railStyle = railBounds
+        ? { top: `${railBounds.top}px`, bottom: `${railBounds.bottom}px`, transform: 'none' }
+        : undefined;
 
     // Build letter→firstIndex map
     const letterMap = useMemo(() => {
@@ -182,6 +216,7 @@ export default function AlphaNav({ items, sortField, sortOrder, onJumpToLetter, 
             <div
                 ref={railRef}
                 className="alpha-rail"
+                style={railStyle}
                 onPointerDown={handleRailPointerDown}
                 onTouchStart={handleRailPointerDown}
                 role="navigation"
@@ -222,7 +257,7 @@ export default function AlphaNav({ items, sortField, sortOrder, onJumpToLetter, 
 
     // ── Non-alpha scroll indicator ──────────────────────────────
     return (
-        <div className="alpha-rail alpha-rail--scroll-indicator" aria-hidden="true">
+        <div className="alpha-rail alpha-rail--scroll-indicator" style={railStyle} aria-hidden="true">
             <div className="scroll-track">
                 <div
                     className="scroll-thumb"

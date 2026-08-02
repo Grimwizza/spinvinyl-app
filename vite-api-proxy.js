@@ -4,7 +4,7 @@
 let _handlers = null;
 async function getHandlers() {
     if (_handlers) return _handlers;
-    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync] = await Promise.all([
+    const [discogs, lyrics, releases, upcoming, upcomingDetail, shops, searchShops, sync, identify] = await Promise.all([
         import('./api/discogs.js'),
         import('./api/lyrics.js'),
         import('./api/releases.js'),
@@ -13,6 +13,7 @@ async function getHandlers() {
         import('./api/shops.js'),
         import('./api/search-shops.js'),
         import('./api/sync.js'),
+        import('./api/identify.js'),
     ]);
     _handlers = {
         discogs: discogs.default,
@@ -23,6 +24,7 @@ async function getHandlers() {
         shops: shops.default,
         searchShops: searchShops.default,
         sync: sync.default,
+        identify: identify.default,
     };
     return _handlers;
 }
@@ -127,6 +129,11 @@ export const apiMiddleware = () => ({
                     if (braveSearchKeyMatch && braveSearchKeyMatch[1]) {
                         process.env.BRAVE_SEARCH_API_KEY = braveSearchKeyMatch[1].replace(/["']/g, '').trim();
                     }
+
+                    const anthropicKeyMatch = envConfig.match(/^ANTHROPIC_API_KEY=(.*)$/m);
+                    if (anthropicKeyMatch && anthropicKeyMatch[1]) {
+                        process.env.ANTHROPIC_API_KEY = anthropicKeyMatch[1].replace(/["']/g, '').trim();
+                    }
                 }
             } catch (e) {
                 console.error('[API Proxy] Failed to reload .env', e);
@@ -168,6 +175,24 @@ export const apiMiddleware = () => ({
                         const mockedRes = mockResponse(resolve, res);
                         req.query = {};
                         h.lyrics(req, mockedRes).catch(reject);
+                    });
+                } catch (err) {
+                    console.error(`API Error (${url}):`, err);
+                    if (!res.writableEnded) {
+                        res.statusCode = 500;
+                        res.end(JSON.stringify({ error: 'Internal Server Error' }));
+                    }
+                }
+                return;
+            }
+
+            // --- ROUTE: /api/identify (AI photo cover identification) ---
+            if (url === '/identify') {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const mockedRes = mockResponse(resolve, res);
+                        req.query = {};
+                        h.identify(req, mockedRes).catch(reject);
                     });
                 } catch (err) {
                     console.error(`API Error (${url}):`, err);

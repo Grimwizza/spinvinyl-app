@@ -233,8 +233,6 @@ const CollectionProgress = ({ spunCount, totalCount }) => {
 // to that 6h rule.
 
 const VALUE_SUMMARY_KEY = 'spinvinyl_collection_value_summary';
-const VALUE_LAST_RUN_KEY = 'spinvinyl_collection_value_last_run';
-const VALUE_RUN_COOLDOWN_HOURS = 24;
 const VALUE_FETCH_DELAY_MS = 1100; // ~55 req/min — safely under Discogs' ~60 req/min budget
 
 const readValueSummary = () => {
@@ -288,24 +286,14 @@ const CollectionValueCard = ({ releases }) => {
                 await new Promise(res => setTimeout(res, VALUE_FETCH_DELAY_MS));
             }
         }
-        if (!cancelledRef.current) {
-            localStorage.setItem(VALUE_LAST_RUN_KEY, new Date().toISOString());
-        }
         runningRef.current = false;
         setRunning(false);
     };
 
+    // Cancel any in-flight manual run if the card unmounts mid-refresh.
     useEffect(() => {
-        if (!releases?.length) return;
-        cancelledRef.current = false;
-
-        const lastRun = localStorage.getItem(VALUE_LAST_RUN_KEY);
-        const hoursSinceRun = lastRun ? (Date.now() - new Date(lastRun)) / 3600000 : Infinity;
-        if (hoursSinceRun > VALUE_RUN_COOLDOWN_HOURS) runBatch();
-
         return () => { cancelledRef.current = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [releases?.length]);
+    }, []);
 
     if (!releases?.length) return null;
 

@@ -7,6 +7,7 @@ import { recordSession, getStoredStats, saveStats, recomputeFromSessions } from 
 
 const SYNC_QUEUE_KEY = 'spinvinyl_sync_queue'; // Array<{ type, payload, queuedAt }>
 const LAST_SYNC_KEY  = 'spinvinyl_last_sync';   // ISO timestamp string
+const SYNCED_IDS_KEY = 'spinvinyl_synced_session_ids'; // Array<string> — ids already confirmed pushed to cloud
 
 // ─── Queue Helpers ───────────────────────────────────────────────
 
@@ -34,21 +35,53 @@ const enqueue = (item) => {
 
 const clearQueue = () => localStorage.removeItem(SYNC_QUEUE_KEY);
 
+// ─── Synced-session tracking ─────────────────────────────────────
+// Sessions are append-only (statsEngine.recordSession only ever pushes), so a
+// delta can be tracked safely by id-set membership. This is NOT index/count
+// based since pullFromCloud's merge can re-sort the local sessions array.
+
+const getSyncedIds = () => {
+    try { return new Set(JSON.parse(localStorage.getItem(SYNCED_IDS_KEY) || '[]')); }
+    catch { return new Set(); }
+};
+
+const markSynced = (ids) => {
+    if (!ids.length) return;
+    try {
+        const existing = getSyncedIds();
+        ids.forEach(id => existing.add(id));
+        localStorage.setItem(SYNCED_IDS_KEY, JSON.stringify([...existing]));
+    } catch (e) {
+        console.error('[SyncEngine] Failed to persist synced ids:', e);
+    }
+};
+
 // ─── Core Sync Operations ────────────────────────────────────────
 
 /**
- * Push current localStorage stats to /api/sync.
+ * Push new (unsynced) sessions to /api/sync. The server dedupes by session id
+ * and recomputes aggregates from the full merged set, so sending only the
+ * delta (instead of the entire lifetime history on every push) is safe —
+ * see api/sync.js's unionSessions.
  * Resolves true on success, false on network/auth error.
  */
 export const pushToCloud = async (username) => {
     if (!username) return false;
     try {
         const stats = getStoredStats();
+        const syncedIds = getSyncedIds();
+        const delta = stats.sessions.filter(s => !syncedIds.has(s.id));
+
+        if (delta.length === 0) {
+            localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
+            return true; // nothing new — already in sync
+        }
+
         const res = await fetch('/api/sync?action=push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({ stats }),
+            body: JSON.stringify({ stats: { sessions: delta } }),
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -57,6 +90,7 @@ export const pushToCloud = async (username) => {
             console.warn('[SyncEngine] Push failed:', err.error);
             return false;
         }
+        markSynced(delta.map(s => s.id));
         localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString());
         return true;
     } catch {
@@ -98,6 +132,9 @@ export const pullFromCloud = async (username) => {
                 (a, b) => (a.startTime || '') < (b.startTime || '') ? -1 : 1
             );
             saveStats(recomputeFromSessions(unionSessions));
+            // These already exist server-side — mark synced so the next push
+            // doesn't needlessly resend them (e.g. after a multi-device merge).
+            markSynced((cloud.sessions || []).map(s => s.id));
             merged = true;
         }
 
