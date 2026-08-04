@@ -136,23 +136,31 @@ const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 // invocation at cold start.
 //
 // Loaded via CJS require() (see the top-of-file createRequire setup), not
-// ESM import() — this is deliberate, not a style choice. Confirmed root
-// cause (2026-08-04, via live scrapeError): with `import()`, Node resolves
-// cheerio's whole dependency graph through each package's ESM "exports"
-// condition, which for dom-serializer routes through
-// `entities/lib/esm/index.js`. Two `includeFiles` attempts in vercel.json
-// (a brace-expansion glob, then the maximally broad `node_modules/**`)
-// both failed to fix this — confirmed via fresh (x-cache: MISS) production
-// curls still showing the identical "Cannot find module .../entities/lib/
-// esm/index.js" error both times, meaning this isn't a missing-file/
-// tracing problem Vercel's includeFiles can address at all. The error's own
-// "Did you mean to import entities/lib/index.js?" confirms the CJS build
-// *is* present in the deployed bundle — only the ESM-specific build is
-// broken. Forcing `require()` here makes Node resolve the entire chain via
-// each package's CJS "require" condition instead, landing on exactly that
-// working file. package.json's `overrides.htmlparser2` pin and vercel.json's
-// `includeFiles` are both leftovers from earlier (ineffective) attempts at
-// this same problem — harmless to leave, safe to remove later.
+// ESM import() — this is deliberate, not a style choice. Debug history
+// (2026-08-04, all confirmed via fresh x-cache:MISS production curls,
+// each a genuinely new production request, not a stale cache read):
+//   1. import() resolved cheerio's whole dependency graph through each
+//      package's ESM "exports" condition, which for dom-serializer routes
+//      through `entities/lib/esm/index.js` — missing in the deployed
+//      bundle. Two `includeFiles` globs (brace-expansion, then the
+//      maximally broad `node_modules/**`) both had no effect on this
+//      specific error.
+//   2. Switched to require() so the graph resolves through each package's
+//      CJS "require" condition instead — confirmed via the error's own
+//      "Did you mean to import entities/lib/index.js?" that this file
+//      *is* present. This worked: resolution got much further, correctly
+//      walking cheerio → domutils → dom-serializer → entities/lib/index.js.
+//   3. New failure at that depth: entities/lib/decode.js does a plain,
+//      fully static `require("./generated/decode-data-html.js")` — a real
+//      48KB file that exists locally — but it's missing from the deployed
+//      bundle too. `includeFiles: "node_modules/**"` in vercel.json is
+//      back in place to test whether it fixes *this* file (it was never
+//      actually exercised against this failure point before, since step 1
+//      never got this far) — if the identical error persists after this
+//      deploy, that's solid evidence `includeFiles` has no effect at all
+//      in this project's deployment pipeline, not a glob-syntax problem.
+// package.json's `overrides.htmlparser2` pin is a leftover from an
+// earlier, separate attempt at this same class of problem.
 async function scrapeHTML(html) {
     const cheerio = require('cheerio');
     const $ = cheerio.load(html);
