@@ -10,12 +10,59 @@
 // Enrichment calls use app-level auth (consumer key/secret) — no user token needed.
 
 import { readFile, writeFile } from 'fs/promises';
-import { createRequire } from 'module';
+import { createRequire, Module } from 'module';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Load cheerio via CJS require(), not ESM import() — see the long comment
 // on scrapeHTML() below for why. `require` isn't natively available here
 // since package.json sets "type": "module", so it's constructed manually.
 const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// See api/_vendor/entities-generated/README.md for full context. Vercel's
+// bundler drops node_modules/entities/lib/generated/* from the deployed
+// function regardless of vercel.json includeFiles config (confirmed
+// ineffective via two separate fresh-production-request tests).
+// entities/lib/decode.js and encode.js load those three files via plain,
+// static, relative require("./generated/*.js") calls that can't be
+// redirected without patching the package itself.
+//
+// This patches Module._resolveFilename (not the require *cache* — a first
+// attempt at that provably didn't work, since Node resolves a request to
+// an absolute path, which requires the file to exist on disk, BEFORE ever
+// consulting the cache; a missing file throws during resolution, so a
+// pre-populated cache entry for that path is never reached). The patch
+// tries real resolution first — so this is a no-op the moment Vercel's
+// bundling is ever fixed — and only falls back to our vendored copies
+// (real project source under api/_vendor/, always deployed correctly)
+// when resolution of one of these three specific filenames fails.
+const GENERATED_ENTITIES_FILES = new Set(['decode-data-html.js', 'decode-data-xml.js', 'encode-html.js']);
+let entitiesResolutionPatched = false;
+function patchEntitiesGeneratedResolution() {
+    if (entitiesResolutionPatched) return;
+    entitiesResolutionPatched = true;
+    try {
+        const vendorDir = path.join(__dirname, '_vendor', 'entities-generated');
+        const originalResolveFilename = Module._resolveFilename;
+        Module._resolveFilename = function (request, ...rest) {
+            const base = path.basename(request);
+            if (request.includes('generated') && GENERATED_ENTITIES_FILES.has(base)) {
+                try {
+                    return originalResolveFilename.call(this, request, ...rest);
+                } catch {
+                    return path.join(vendorDir, base);
+                }
+            }
+            return originalResolveFilename.call(this, request, ...rest);
+        };
+    } catch (err) {
+        // Best-effort — if this fails, cheerio's own require() below throws
+        // its normal (already-handled) error and we fall through to the
+        // Discogs fallback exactly as before.
+        console.warn('[Upcoming Vinyl] entities resolution patch failed:', err.message);
+    }
+}
 
 const UPCOMING_URL = 'https://upcomingvinyl.com/featured';
 const DISCOGS_SEARCH = 'https://api.discogs.com/database/search';
@@ -150,29 +197,30 @@ const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 //      "Did you mean to import entities/lib/index.js?" that this file
 //      *is* present. This worked: resolution got much further, correctly
 //      walking cheerio → domutils → dom-serializer → entities/lib/index.js.
-//   3. New failure at that depth: entities/lib/decode.js does a plain,
-//      fully static `require("./generated/decode-data-html.js")` — a real
-//      48KB file that exists locally — but it's missing from the deployed
-//      bundle too. Re-added `includeFiles: "node_modules/**"` in
-//      vercel.json to test whether it fixes *this* file specifically
-//      (untested before, since step 1 never got this far) — a fresh
-//      production curl afterward showed the byte-identical error, proving
-//      `includeFiles` has zero effect in this project's deployment
-//      pipeline, for any target. Reverted it — not worth the bundle bloat
-//      for a config that provably does nothing here.
-//
-// Net result: the primary upcomingvinyl.com scrape currently cannot run
-// in production at all (this specific generated-file gap is unresolved),
-// but it now fails safely — caught here, falls through to the Discogs
-// fallback below, same as any other scrape failure. Real next steps if
-// picked back up: vendor entities' generated/*.js files directly into
-// this repo (bypassing node_modules/Vercel's bundler entirely), or
-// replace cheerio with a simpler parser with no generated-data-file
-// dependency chain (e.g. hand-rolled regex extraction, or a minimal
-// HTML parser package). package.json's `overrides.htmlparser2` pin is a
-// leftover from an earlier, separate attempt at this same class of
-// problem.
+//   3. New failure at that depth: entities/lib/decode.js (and encode.js)
+//      do plain, fully static `require("./generated/*.js")` calls for
+//      three small generated data files — real, present locally — but
+//      missing from the deployed bundle too. `includeFiles:
+//      "node_modules/**"` in vercel.json, tested specifically against
+//      this failure (untested before, since step 1 never got this far),
+//      had zero effect — a fresh production curl afterward showed the
+//      byte-identical error, proving `includeFiles` doesn't work in this
+//      project's deployment pipeline, for any target. Reverted it.
+//   4. A first fix attempt pre-populated Node's require *cache* for the
+//      expected paths using vendored copies — didn't work; Node resolves
+//      a request to an absolute path (which requires the file to exist on
+//      disk) before ever consulting the cache, so a missing file throws
+//      during resolution and the cache is never reached.
+//   5. Fixed via `patchEntitiesGeneratedResolution()` above instead: it
+//      patches `Module._resolveFilename` itself, redirecting resolution
+//      of these three specific filenames to vendored copies (real project
+//      source under `api/_vendor/entities-generated/`, always deployed
+//      correctly) only when real resolution fails — self-healing the
+//      moment Vercel's bundling is ever fixed.
+// package.json's `overrides.htmlparser2` pin is a leftover from an
+// earlier, separate attempt at this same class of problem.
 async function scrapeHTML(html) {
+    patchEntitiesGeneratedResolution();
     const cheerio = require('cheerio');
     const $ = cheerio.load(html);
     const releases = [];
