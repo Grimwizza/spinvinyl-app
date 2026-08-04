@@ -134,11 +134,14 @@ const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 // `entities` side by side — dom-serializer/htmlparser2 need ^4.x, parse5
 // needs ^6.x — which npm resolves correctly via nested node_modules, but
 // Vercel's build tracer collapses to a single top-level copy, breaking
-// dom-serializer's `entities/lib/esm/index.js` import. See
-// `functions["api/upcoming.js"].includeFiles` in vercel.json, which
-// force-includes the real nested copies so the trace-collapse can't drop
-// them. package.json's `overrides.htmlparser2` pin is a leftover from an
-// earlier (incomplete) attempt at this same problem — safe to leave as is.
+// dom-serializer's `entities/lib/esm/index.js` import. A narrower
+// `includeFiles` glob using brace expansion (`node_modules/{a,b,c}/**`)
+// did NOT fix this — confirmed via a fresh (x-cache: MISS) production
+// curl still showing the identical error, meaning Vercel's includeFiles
+// glob matcher likely doesn't support brace expansion. Switched to the
+// unambiguous `node_modules/**` in vercel.json instead. package.json's
+// `overrides.htmlparser2` pin is a leftover from an earlier (incomplete)
+// attempt at this same problem — safe to leave as is.
 async function scrapeHTML(html) {
     const cheerio = await import('cheerio');
     const $ = cheerio.load(html);

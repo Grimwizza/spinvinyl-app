@@ -7,7 +7,7 @@
   ],
   "functions": {
     "api/upcoming.js": {
-      "includeFiles": "node_modules/{entities,dom-serializer,domutils,domhandler,htmlparser2,parse5,cheerio,cheerio-select}/**"
+      "includeFiles": "node_modules/**"
     }
   }
 }
