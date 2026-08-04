@@ -10,6 +10,12 @@
 // Enrichment calls use app-level auth (consumer key/secret) — no user token needed.
 
 import { readFile, writeFile } from 'fs/promises';
+import { createRequire } from 'module';
+
+// Load cheerio via CJS require(), not ESM import() — see the long comment
+// on scrapeHTML() below for why. `require` isn't natively available here
+// since package.json sets "type": "module", so it's constructed manually.
+const require = createRequire(import.meta.url);
 
 const UPCOMING_URL = 'https://upcomingvinyl.com/featured';
 const DISCOGS_SEARCH = 'https://api.discogs.com/database/search';
@@ -124,26 +130,31 @@ const parseDate = (str) => {
 //   "April 19, 2026"  "April 19, 2026 / Saturday"  "April 19"  "April 19 · Saturday"
 const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 
-// cheerio is imported dynamically (not statically at module scope) so that a
-// load failure surfaces as a catchable error inside the guarded scrape try/catch
-// below (falling through to the Discogs fallback), rather than crashing the
-// whole function invocation at cold start.
+// cheerio is required lazily inside a try/catch-guarded call (not imported
+// at module scope) so a load failure surfaces as a catchable error, falling
+// through to the Discogs fallback, rather than crashing the whole function
+// invocation at cold start.
 //
-// Confirmed root cause (2026-08-04, via live scrapeError): cheerio's
-// dependency tree legitimately needs two different major versions of
-// `entities` side by side — dom-serializer/htmlparser2 need ^4.x, parse5
-// needs ^6.x — which npm resolves correctly via nested node_modules, but
-// Vercel's build tracer collapses to a single top-level copy, breaking
-// dom-serializer's `entities/lib/esm/index.js` import. A narrower
-// `includeFiles` glob using brace expansion (`node_modules/{a,b,c}/**`)
-// did NOT fix this — confirmed via a fresh (x-cache: MISS) production
-// curl still showing the identical error, meaning Vercel's includeFiles
-// glob matcher likely doesn't support brace expansion. Switched to the
-// unambiguous `node_modules/**` in vercel.json instead. package.json's
-// `overrides.htmlparser2` pin is a leftover from an earlier (incomplete)
-// attempt at this same problem — safe to leave as is.
+// Loaded via CJS require() (see the top-of-file createRequire setup), not
+// ESM import() — this is deliberate, not a style choice. Confirmed root
+// cause (2026-08-04, via live scrapeError): with `import()`, Node resolves
+// cheerio's whole dependency graph through each package's ESM "exports"
+// condition, which for dom-serializer routes through
+// `entities/lib/esm/index.js`. Two `includeFiles` attempts in vercel.json
+// (a brace-expansion glob, then the maximally broad `node_modules/**`)
+// both failed to fix this — confirmed via fresh (x-cache: MISS) production
+// curls still showing the identical "Cannot find module .../entities/lib/
+// esm/index.js" error both times, meaning this isn't a missing-file/
+// tracing problem Vercel's includeFiles can address at all. The error's own
+// "Did you mean to import entities/lib/index.js?" confirms the CJS build
+// *is* present in the deployed bundle — only the ESM-specific build is
+// broken. Forcing `require()` here makes Node resolve the entire chain via
+// each package's CJS "require" condition instead, landing on exactly that
+// working file. package.json's `overrides.htmlparser2` pin and vercel.json's
+// `includeFiles` are both leftovers from earlier (ineffective) attempts at
+// this same problem — harmless to leave, safe to remove later.
 async function scrapeHTML(html) {
-    const cheerio = await import('cheerio');
+    const cheerio = require('cheerio');
     const $ = cheerio.load(html);
     const releases = [];
     let currentDate = null;
