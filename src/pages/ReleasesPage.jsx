@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X, Flame, CalendarDays } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { getWeeklyRecap } from '../lib/statsEngine.js';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -3026,6 +3027,92 @@ const ShopLocalSection = () => {
     );
 };
 
+// ─── Weekly Recap Card ─────────────────────────────────────────────
+// "This week" digest — reuses statsEngine.js data already tracked locally,
+// no new infrastructure. Computed once per mount (the whole page unmounts
+// on navigation away from Explore, so returning here already refreshes it).
+const WeeklyRecapCard = () => {
+    const recap = useMemo(() => getWeeklyRecap(), []);
+    if (recap.spins === 0 && recap.streak === 0) return null;
+
+    return (
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-terracotta-500/10 to-brass-500/10 p-4 mb-3">
+            <div className="flex items-center gap-2 mb-3">
+                <Flame size={14} className="text-terracotta-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-terracotta-400">Your Week</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                    <p className="text-2xl font-black text-white">{recap.spins}</p>
+                    <p className="text-[10px] text-stone-500 uppercase tracking-wide mt-0.5">Spin{recap.spins === 1 ? '' : 's'}</p>
+                </div>
+                <div>
+                    <p className="text-2xl font-black text-white">{recap.newArtists}</p>
+                    <p className="text-[10px] text-stone-500 uppercase tracking-wide mt-0.5">New Artist{recap.newArtists === 1 ? '' : 's'}</p>
+                </div>
+                <div>
+                    <p className="text-2xl font-black text-white">{recap.streak}</p>
+                    <p className="text-[10px] text-stone-500 uppercase tracking-wide mt-0.5">Day Streak</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── On This Day Card ───────────────────────────────────────────────
+// Records added to the collection on this date in a previous year —
+// reuses date_added already synced per item, no new infrastructure.
+const OnThisDayCard = ({ releases }) => {
+    const matches = useMemo(() => {
+        const now = new Date();
+        const month = now.getMonth();
+        const day = now.getDate();
+        const year = now.getFullYear();
+        return releases
+            .filter(r => {
+                if (!r.date_added) return false;
+                const d = new Date(r.date_added);
+                return !isNaN(d.getTime()) && d.getMonth() === month && d.getDate() === day && d.getFullYear() !== year;
+            })
+            .map(r => ({ ...r, yearsAgo: year - new Date(r.date_added).getFullYear() }))
+            .sort((a, b) => a.yearsAgo - b.yearsAgo);
+    }, [releases]);
+
+    if (matches.length === 0) return null;
+
+    return (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 mb-3">
+            <div className="flex items-center gap-2 mb-3">
+                <CalendarDays size={14} className="text-brass-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-brass-400">On This Day</span>
+            </div>
+            <div className="space-y-2.5">
+                {matches.slice(0, 4).map(r => {
+                    const info = r.basic_information || {};
+                    const artist = (info.artists || []).map(a => cleanName(a.name)).join(', ');
+                    const img = info.thumb || info.cover_image;
+                    return (
+                        <div key={r.instance_id || r.id} className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-stone-800 flex-shrink-0">
+                                {img ? (
+                                    <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center"><Disc3 size={16} className="text-stone-600" /></div>
+                                )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-white truncate">{cleanName(info.title) || 'Unknown'}</p>
+                                <p className="text-xs text-stone-500 truncate">{artist || 'Unknown'}</p>
+                            </div>
+                            <span className="text-[10px] font-bold text-stone-500 flex-shrink-0">{r.yearsAgo}y ago</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
@@ -3173,6 +3260,12 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
 
             {/* Content */}
             <div className="max-w-3xl mx-auto px-4 pt-5">
+                {activeTab === 'vinylNews' && isAuthenticated && (
+                    <>
+                        <WeeklyRecapCard />
+                        <OnThisDayCard releases={releases} />
+                    </>
+                )}
                 {activeTab === 'newReleases' && (
                     <UpcomingReleasesSection collection={releases} collectionLoading={collectionLoading} />
                 )}

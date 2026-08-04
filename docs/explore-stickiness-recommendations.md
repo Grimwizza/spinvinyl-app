@@ -37,11 +37,12 @@ again tomorrow, rather than only when they've just bought a record?
    artists discovered, current streak" using data `statsEngine.js` already
    collects — zero new infrastructure, purely a new read of existing local
    data. The cheapest, most obviously additive option here, and a natural
-   first thing to build next.
+   first thing to build next. _Status: built._
 
 2. **"On this day."** Records added to the collection on this date in a
    previous year (`date_added` is already synced per item). Also zero new
    infrastructure — a nostalgia hook that costs almost nothing to build.
+   _Status: built._
 
 3. **Streak-preservation nudge.** Pair the existing streak count with the
    existing PWA install card's real estate — "3-day streak, don't lose it,

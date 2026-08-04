@@ -205,3 +205,33 @@ export const getUniqueDays = () => {
     const stats = getStoredStats();
     return new Set(stats.sessions.map(s => s.startTime?.slice(0, 10)).filter(Boolean)).size;
 };
+
+/**
+ * Weekly digest: spins logged this calendar week, artists spun for the
+ * first time ever this week, and the current streak. Powers the Explore
+ * tab's Weekly Recap card. Uses the same Sunday-start week boundary as
+ * getPeriodSpinCount('week') for a consistent "this week" definition.
+ */
+export const getWeeklyRecap = () => {
+    const stats = getStoredStats();
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    const weekStartStr = toDateStr(weekStart);
+
+    const firstSeenByArtist = new Map();
+    stats.sessions.forEach(s => {
+        if (!s.artist || !s.startTime) return;
+        const day = s.startTime.slice(0, 10);
+        if (!firstSeenByArtist.has(s.artist) || day < firstSeenByArtist.get(s.artist)) {
+            firstSeenByArtist.set(s.artist, day);
+        }
+    });
+    const newArtists = [...firstSeenByArtist.values()].filter(day => day >= weekStartStr).length;
+
+    return {
+        spins: getPeriodSpinCount('week'),
+        newArtists,
+        streak: getCurrentStreak(),
+    };
+};
