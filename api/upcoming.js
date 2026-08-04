@@ -20,41 +20,48 @@ import { fileURLToPath } from 'url';
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// See api/_vendor/entities-generated/README.md for full context. Vercel's
-// bundler drops node_modules/entities/lib/generated/* from the deployed
-// function regardless of vercel.json includeFiles config (confirmed
-// ineffective via two separate fresh-production-request tests).
-// entities/lib/decode.js and encode.js load those three files via plain,
-// static, relative require("./generated/*.js") calls that can't be
-// redirected without patching the package itself.
+// See api/_vendor/entities/README.md for full context. Vercel's function
+// bundler drops files from node_modules/entities/lib/ in the deployed
+// bundle — confirmed to affect multiple different files across several
+// rounds of debugging (first lib/generated/decode-data-html.js, then
+// lib/escape.js once that gap was patched around), regardless of
+// vercel.json includeFiles config (confirmed ineffective twice, for any
+// target, via fresh production-request tests). Rather than continuing to
+// patch individual missing files one at a time as they keep surfacing,
+// the entire entities package is vendored into api/_vendor/entities/.
 //
-// This patches Module._resolveFilename (not the require *cache* — a first
-// attempt at that provably didn't work, since Node resolves a request to
-// an absolute path, which requires the file to exist on disk, BEFORE ever
-// consulting the cache; a missing file throws during resolution, so a
-// pre-populated cache entry for that path is never reached). The patch
-// tries real resolution first — so this is a no-op the moment Vercel's
-// bundling is ever fixed — and only falls back to our vendored copies
-// (real project source under api/_vendor/, always deployed correctly)
-// when resolution of one of these three specific filenames fails.
-const GENERATED_ENTITIES_FILES = new Set(['decode-data-html.js', 'decode-data-xml.js', 'encode-html.js']);
+// This patches Module._resolveFilename (not the require *cache* — a first,
+// narrower attempt at that provably didn't work, since Node resolves a
+// request to an absolute path, which requires the file to exist on disk,
+// BEFORE ever consulting the cache; a missing file throws during
+// resolution, so a pre-populated cache entry for that path is never
+// reached). It always tries real resolution first — so this is a complete
+// no-op the moment Vercel's bundling is ever fixed — and only falls back
+// to the equivalent file in the vendored copy when resolution fails for a
+// request originating from somewhere inside the real entities package.
 let entitiesResolutionPatched = false;
 function patchEntitiesGeneratedResolution() {
     if (entitiesResolutionPatched) return;
     entitiesResolutionPatched = true;
     try {
-        const vendorDir = path.join(__dirname, '_vendor', 'entities-generated');
+        // entities' own package.json "exports" map blocks direct subpath
+        // access to "./package.json", so the root is derived from the main
+        // entry (lib/index.js) instead: strip the filename and one "lib"
+        // directory level.
+        const entitiesRoot = path.dirname(path.dirname(require.resolve('entities')));
+        const vendorRoot = path.join(__dirname, '_vendor', 'entities');
         const originalResolveFilename = Module._resolveFilename;
-        Module._resolveFilename = function (request, ...rest) {
-            const base = path.basename(request);
-            if (request.includes('generated') && GENERATED_ENTITIES_FILES.has(base)) {
-                try {
-                    return originalResolveFilename.call(this, request, ...rest);
-                } catch {
-                    return path.join(vendorDir, base);
+        Module._resolveFilename = function (request, parent, ...rest) {
+            try {
+                return originalResolveFilename.call(this, request, parent, ...rest);
+            } catch (err) {
+                const parentFilename = parent?.filename;
+                if (parentFilename && parentFilename.startsWith(entitiesRoot + path.sep)) {
+                    const parentRelDir = path.relative(entitiesRoot, path.dirname(parentFilename));
+                    return path.join(vendorRoot, parentRelDir, request);
                 }
+                throw err;
             }
-            return originalResolveFilename.call(this, request, ...rest);
         };
     } catch (err) {
         // Best-effort — if this fails, cheerio's own require() below throws
@@ -211,12 +218,20 @@ const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 //      a request to an absolute path (which requires the file to exist on
 //      disk) before ever consulting the cache, so a missing file throws
 //      during resolution and the cache is never reached.
-//   5. Fixed via `patchEntitiesGeneratedResolution()` above instead: it
-//      patches `Module._resolveFilename` itself, redirecting resolution
-//      of these three specific filenames to vendored copies (real project
-//      source under `api/_vendor/entities-generated/`, always deployed
-//      correctly) only when real resolution fails — self-healing the
-//      moment Vercel's bundling is ever fixed.
+//   5. Fixed properly via patching `Module._resolveFilename` itself,
+//      targeted at those three specific filenames — deployed, and a fresh
+//      production curl showed real progress (a different, deeper error),
+//      but then failed on `entities/lib/escape.js` (required by
+//      encode.js) — a *different* file than the three originally
+//      patched, proving Vercel drops more than just the generated/
+//      subfolder from this package.
+//   6. Rather than keep patching individual files one at a time as more
+//      surface, vendored the *entire* entities package (see
+//      `api/_vendor/entities/README.md`) and generalized
+//      `patchEntitiesGeneratedResolution()` to redirect ANY failed
+//      resolution whose parent module lives inside the real entities
+//      package to the equivalent path in the vendored copy — covers every
+//      file Vercel might be dropping, not just the ones discovered so far.
 // package.json's `overrides.htmlparser2` pin is a leftover from an
 // earlier, separate attempt at this same class of problem.
 async function scrapeHTML(html) {
