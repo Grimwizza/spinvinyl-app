@@ -153,14 +153,25 @@ const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 //   3. New failure at that depth: entities/lib/decode.js does a plain,
 //      fully static `require("./generated/decode-data-html.js")` — a real
 //      48KB file that exists locally — but it's missing from the deployed
-//      bundle too. `includeFiles: "node_modules/**"` in vercel.json is
-//      back in place to test whether it fixes *this* file (it was never
-//      actually exercised against this failure point before, since step 1
-//      never got this far) — if the identical error persists after this
-//      deploy, that's solid evidence `includeFiles` has no effect at all
-//      in this project's deployment pipeline, not a glob-syntax problem.
-// package.json's `overrides.htmlparser2` pin is a leftover from an
-// earlier, separate attempt at this same class of problem.
+//      bundle too. Re-added `includeFiles: "node_modules/**"` in
+//      vercel.json to test whether it fixes *this* file specifically
+//      (untested before, since step 1 never got this far) — a fresh
+//      production curl afterward showed the byte-identical error, proving
+//      `includeFiles` has zero effect in this project's deployment
+//      pipeline, for any target. Reverted it — not worth the bundle bloat
+//      for a config that provably does nothing here.
+//
+// Net result: the primary upcomingvinyl.com scrape currently cannot run
+// in production at all (this specific generated-file gap is unresolved),
+// but it now fails safely — caught here, falls through to the Discogs
+// fallback below, same as any other scrape failure. Real next steps if
+// picked back up: vendor entities' generated/*.js files directly into
+// this repo (bypassing node_modules/Vercel's bundler entirely), or
+// replace cheerio with a simpler parser with no generated-data-file
+// dependency chain (e.g. hand-rolled regex extraction, or a minimal
+// HTML parser package). package.json's `overrides.htmlparser2` pin is a
+// leftover from an earlier, separate attempt at this same class of
+// problem.
 async function scrapeHTML(html) {
     const cheerio = require('cheerio');
     const $ = cheerio.load(html);
