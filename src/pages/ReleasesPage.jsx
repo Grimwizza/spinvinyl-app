@@ -29,6 +29,29 @@ const writeCache = (key, data) => {
 };
 const clearCache = (key) => { try { localStorage.removeItem(key); } catch { } };
 
+// ─── Per-artist masters cache (Complete Collection) ───────────────
+// A separate cache from readCache/writeCache above, since it needs one
+// independent timestamp per artist inside a single localStorage key rather
+// than one shared timestamp for a whole blob. An artist's back catalog
+// (their master releases) changes slowly — cached for 7 days — which is
+// what actually cuts Discogs call volume; the "what do I own" comparison
+// against it is always recomputed live from the current collection, never
+// cached, so a just-logged purchase still shows up immediately.
+const ARTIST_MASTERS_CACHE_KEY = 'spinvinyl_artist_masters_v1';
+const ARTIST_MASTERS_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const readArtistMastersCache = () => {
+    try { return JSON.parse(localStorage.getItem(ARTIST_MASTERS_CACHE_KEY) || '{}'); }
+    catch { return {}; }
+};
+const writeArtistMastersEntry = (artistId, uniqueMasters) => {
+    try {
+        const cache = readArtistMastersCache();
+        cache[artistId] = { uniqueMasters, fetchedAt: Date.now() };
+        localStorage.setItem(ARTIST_MASTERS_CACHE_KEY, JSON.stringify(cache));
+    } catch { /* localStorage full/unavailable — just skip caching this entry */ }
+};
+
 // ─── Upcoming wantlist persistence ────────────────────────────────
 // Stores saved upcoming releases locally (keyed by `raw`). Data comes from
 // upcomingvinyl.com, so there's no real Discogs release id until the record
@@ -370,6 +393,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     const [genreWeights, setGenreWeights] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [isFallback, setIsFallback] = useState(false);
 
     const [selectedRelease, setSelectedRelease] = useState(null);
     const [viewMode, setViewMode] = useState('grid');
@@ -481,6 +505,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             const cached = readCache(CACHE_KEYS.releases);
             if (Array.isArray(cached?.upcoming) && cached.upcoming.length > 0) {
                 setUpcoming(cached.upcoming);
+                setIsFallback(!!cached.fallback);
                 return;
             }
         }
@@ -496,6 +521,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
             }
             const list = Array.isArray(data.releases) ? data.releases : [];
             setUpcoming(list);
+            setIsFallback(!!data.fallback);
             if (list.length > 0) writeCache(CACHE_KEYS.releases, { upcoming: list, fallback: data.fallback ?? false });
         } catch {
             setError('Failed to load upcoming releases. Try refreshing.');
@@ -736,6 +762,13 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
                     </button>
                 </div>
             </div>
+
+            {isFallback && (
+                <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+                    <AlertCircle size={13} className="flex-shrink-0" />
+                    Showing popular new vinyl from Discogs — the release calendar is temporarily unavailable.
+                </div>
+            )}
 
             {/* Customize monitoring panel */}
             {panelOpen && (
@@ -1003,7 +1036,7 @@ const UpcomingReleasesSection = ({ collection, collectionLoading }) => {
     );
 };
 
-// ─── Vinyl News Section ───────────────────────────────────────────
+// ─── Music News Section ───────────────────────────────────────────
 
 const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
     const [articles, setArticles] = useState([]);
@@ -1064,8 +1097,8 @@ const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h2 className="text-base font-bold text-white">Vinyl News</h2>
-                    <p className="text-xs text-stone-500 mt-0.5">Latest from Vinyl Factory, Pitchfork, Bandcamp Daily & NME</p>
+                    <h2 className="text-base font-bold text-white">Music News</h2>
+                    <p className="text-xs text-stone-500 mt-0.5">Vinyl releases, artist news, and album drops from 9 trusted sources</p>
                 </div>
                 <button
                     onClick={() => fetchNews(true)}
@@ -1168,6 +1201,8 @@ const WantlistSection = () => {
     const [selectedUpcoming, setSelectedUpcoming] = useState(null);
     const [reconcileMatches, setReconcileMatches] = useState({}); // { [raw]: { id, title } }
     const [reconcileAddState, setReconcileAddState] = useState({}); // { [raw]: 'pending'|'error' }
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('added_desc');
 
     const changeViewMode = (mode) => {
         setViewMode(mode);
@@ -1254,12 +1289,18 @@ const WantlistSection = () => {
         setError(null);
         clearCache(CACHE_KEYS.wantlist);
         try {
-            const res = await fetch(`/api/discogs?action=getWantlist`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed');
-            
-            setWants(data.wants || []);
-            writeCache(CACHE_KEYS.wantlist, data.wants || []);
+            // Discogs paginates wants in batches of 100 — loop until every page is
+            // fetched so wantlists over 100 items aren't silently truncated.
+            let allWants = [];
+            for (let page = 1; page <= 20; page++) {
+                const res = await fetch(`/api/discogs?action=getWantlist&page=${page}&perPage=100`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed');
+                allWants = allWants.concat(data.wants || []);
+                if (page >= (data.pagination?.pages ?? 1)) break;
+            }
+            setWants(allWants);
+            writeCache(CACHE_KEYS.wantlist, allWants);
         } catch (e) {
             setError('Failed to load wantlist.');
         } finally {
@@ -1287,6 +1328,33 @@ const WantlistSection = () => {
             setTimeout(() => setRemoveState(prev => { delete prev[releaseId]; return {...prev} }), 3000);
         }
     };
+
+    const filteredSortedWants = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        let result = wants;
+        if (q) {
+            result = wants.filter(item => {
+                const info = item.basic_information || {};
+                const title = (info.title || '').toLowerCase();
+                const artist = (info.artists || []).map(a => a.name).join(' ').toLowerCase();
+                return title.includes(q) || artist.includes(q);
+            });
+        }
+        const getTitle = (item) => (item.basic_information?.title || '').toLowerCase();
+        const getArtist = (item) => (item.basic_information?.artists?.[0]?.name || '').toLowerCase();
+        const getYear = (item) => item.basic_information?.year || 0;
+        const sorted = [...result];
+        switch (sortBy) {
+            case 'title_asc': sorted.sort((a, b) => getTitle(a).localeCompare(getTitle(b))); break;
+            case 'artist_asc': sorted.sort((a, b) => getArtist(a).localeCompare(getArtist(b))); break;
+            case 'year_desc': sorted.sort((a, b) => getYear(b) - getYear(a)); break;
+            case 'added_desc':
+            default:
+                // Already in Discogs' own sort=added&sort_order=desc order — no re-sort needed.
+                break;
+        }
+        return sorted;
+    }, [wants, searchQuery, sortBy]);
 
     return (
         <div>
@@ -1337,6 +1405,31 @@ const WantlistSection = () => {
                     </button>
                 </div>
             </div>
+
+            {wants.length > 0 && (
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                    <div className="relative flex-1">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-500 pointer-events-none" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search your wantlist…"
+                            className="w-full bg-white/[0.06] border border-white/10 rounded-xl pl-8 pr-3 py-2 text-sm text-white placeholder-stone-600 focus:outline-none focus:border-terracotta-500/50 transition-colors"
+                        />
+                    </div>
+                    <select
+                        value={sortBy}
+                        onChange={e => setSortBy(e.target.value)}
+                        className="bg-white/[0.06] border border-white/10 rounded-xl px-3 py-2 text-sm text-stone-300 focus:outline-none focus:border-terracotta-500/50 transition-colors flex-shrink-0"
+                    >
+                        <option value="added_desc">Recently Added</option>
+                        <option value="artist_asc">Artist A-Z</option>
+                        <option value="title_asc">Title A-Z</option>
+                        <option value="year_desc">Year, Newest</option>
+                    </select>
+                </div>
+            )}
 
             {/* Saved Upcoming Releases */}
             {savedUpcoming.length > 0 && (
@@ -1444,9 +1537,16 @@ const WantlistSection = () => {
                 </div>
             )}
 
-            {!loading && wants.length > 0 && viewMode === 'grid' && (
+            {!loading && !error && wants.length > 0 && filteredSortedWants.length === 0 && (
+                <div className="text-center py-12 text-stone-500 text-sm">
+                    <Search size={36} className="mx-auto mb-3 opacity-20" />
+                    <p>No records match "{searchQuery}"</p>
+                </div>
+            )}
+
+            {!loading && filteredSortedWants.length > 0 && viewMode === 'grid' && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {wants.map(item => {
+                    {filteredSortedWants.map(item => {
                         const info = item.basic_information || {};
                         const title = info.title;
                         const artistName = (info.artists || []).map(a => cleanName(a.name)).join(', ');
@@ -1491,9 +1591,9 @@ const WantlistSection = () => {
                 </div>
             )}
 
-            {!loading && wants.length > 0 && viewMode === 'list' && (
+            {!loading && filteredSortedWants.length > 0 && viewMode === 'list' && (
                 <div className="space-y-1">
-                    {wants.map(item => {
+                    {filteredSortedWants.map(item => {
                         const info = item.basic_information || {};
                         const title = info.title;
                         const artistName = (info.artists || []).map(a => cleanName(a.name)).join(', ');
@@ -1745,29 +1845,45 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
     const [searchQuery, setSearchQuery] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
 
-    // Fetches gap data for a single artist. Shared by fetchGaps loop and on-demand search adds.
+    // Fetches (or reuses a cached copy of) an artist's unique album-format
+    // masters — the expensive Discogs call. Cached 7 days per artist since a
+    // back catalog rarely changes week to week; only hits Discogs on a miss.
+    const fetchArtistMasters = useCallback(async (artist) => {
+        const cache = readArtistMastersCache();
+        const cached = cache[artist.id];
+        if (cached && Date.now() - cached.fetchedAt < ARTIST_MASTERS_TTL_MS) {
+            return cached.uniqueMasters;
+        }
+        let allMasters = [];
+        for (let p = 1; p <= 3; p++) {
+            const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
+            if (!res.ok) break;
+            const data = await res.json();
+            allMasters = allMasters.concat(data.results || []);
+            if (p >= (data.pagination?.pages ?? 1)) break;
+            await new Promise(r => setTimeout(r, 300));
+        }
+        const albumMasters = allMasters.filter(r => {
+            const fmts = (r.format || []).map(f => f.toLowerCase());
+            return fmts.some(f => f === 'album' || f === 'lp') && !fmts.some(f => MINOR_FORMATS.has(f));
+        });
+        const seen = new Map();
+        for (const r of albumMasters) {
+            const t = (r.title || '').toLowerCase().trim();
+            if (!seen.has(t)) seen.set(t, r);
+        }
+        const uniqueMasters = Array.from(seen.values());
+        writeArtistMastersEntry(artist.id, uniqueMasters);
+        // Rate-limit only after a genuine live Discogs call — a cache hit
+        // above returns before this point and skips the wait entirely.
+        await new Promise(r => setTimeout(r, 150));
+        return uniqueMasters;
+    }, []);
+
     const fetchArtistGap = useCallback(async (artist) => {
         try {
-            let allMasters = [];
-            for (let p = 1; p <= 3; p++) {
-                const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
-                if (!res.ok) break;
-                const data = await res.json();
-                allMasters = allMasters.concat(data.results || []);
-                if (p >= (data.pagination?.pages ?? 1)) break;
-                await new Promise(r => setTimeout(r, 300));
-            }
-            const albumMasters = allMasters.filter(r => {
-                const fmts = (r.format || []).map(f => f.toLowerCase());
-                return fmts.some(f => f === 'album' || f === 'lp') && !fmts.some(f => MINOR_FORMATS.has(f));
-            });
-            if (albumMasters.length === 0) return null;
-            const seen = new Map();
-            for (const r of albumMasters) {
-                const t = (r.title || '').toLowerCase().trim();
-                if (!seen.has(t)) seen.set(t, r);
-            }
-            const uniqueMasters = Array.from(seen.values());
+            const uniqueMasters = await fetchArtistMasters(artist);
+            if (uniqueMasters.length === 0) return null;
             const isOwned = (r) =>
                 ownedMasterIds.has(String(r.id)) ||
                 ownedMasterIds.has(String(r.main_release));
@@ -1789,7 +1905,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         } catch {
             return null;
         }
-    }, [ownedMasterIds, ownedTitlesByArtist]);
+    }, [fetchArtistMasters, ownedMasterIds, ownedTitlesByArtist]);
 
     // Loads all artists not already in loadedGaps. Called when "complete" view is active.
     const fetchExtraArtists = useCallback(async (loadedGaps) => {
@@ -1806,7 +1922,6 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
             const entry = await fetchArtistGap(artist);
             if (entry) setGaps(prev => [...prev, entry]);
             setExtraProgress(prev => ({ ...prev, done: prev.done + 1 }));
-            await new Promise(r => setTimeout(r, 150));
         }
         if (extraRunRef.current === runId) setLoadingExtra(false);
     }, [collectionArtists, fetchArtistGap]);
@@ -1845,7 +1960,6 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
                 setGaps(prev => [...prev, entry]);
             }
             setProgress(prev => ({ ...prev, done: prev.done + 1 }));
-            await new Promise(r => setTimeout(r, 150));
         }
 
         if (fetchRunRef.current !== runId) return;
@@ -2335,6 +2449,42 @@ const normalizeOSMShop = (el) => {
     };
 };
 
+// Distance in miles between two lat/lng points (haversine formula).
+const distanceMiles = (lat1, lon1, lat2, lon2) => {
+    const R = 3958.8; // Earth radius, miles
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+// ─── Light shop-search cache ────────────────────────────────────────
+// Keyed on a rounded lat/lng + radius (not the generic single-blob readCache
+// helper, since results vary by search location). Short TTL — just enough to
+// avoid re-hitting Overpass for the exact same search (re-opening the tab,
+// toggling the map), not meant to serve genuinely stale results.
+const SHOP_CACHE_KEY = 'spinvinyl_shops_cache_v1';
+const SHOP_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+const shopCacheKey = (lat, lng, mi) => `${lat.toFixed(2)},${lng.toFixed(2)}@${mi}`;
+
+const readShopCache = (lat, lng, mi) => {
+    try {
+        const all = JSON.parse(localStorage.getItem(SHOP_CACHE_KEY) || '{}');
+        const entry = all[shopCacheKey(lat, lng, mi)];
+        if (entry && Date.now() - entry.fetchedAt < SHOP_CACHE_TTL_MS) return entry.shops;
+    } catch { /* miss */ }
+    return null;
+};
+const writeShopCache = (lat, lng, mi, shops) => {
+    try {
+        const all = JSON.parse(localStorage.getItem(SHOP_CACHE_KEY) || '{}');
+        all[shopCacheKey(lat, lng, mi)] = { shops, fetchedAt: Date.now() };
+        localStorage.setItem(SHOP_CACHE_KEY, JSON.stringify(all));
+    } catch { /* non-fatal — just skip caching */ }
+};
+
 // Leaflet custom marker icons (created lazily to avoid SSR issues)
 const createShopIcon = (highlighted = false) => {
     const size = highlighted ? 36 : 30;
@@ -2512,6 +2662,12 @@ const ShopLocalSection = () => {
     const [favorites, setFavorites] = useState(() => loadShopFavorites());
 
     const searchShops = useCallback(async (loc, mi) => {
+        const cached = readShopCache(loc.lat, loc.lng, mi);
+        if (cached) {
+            setShops(cached);
+            setError(null);
+            return;
+        }
         setLoading(true);
         setError(null);
         setShops([]);
@@ -2528,6 +2684,7 @@ const ShopLocalSection = () => {
                 .map(normalizeOSMShop)
                 .filter(s => s.lat && s.lon && s.name !== 'Record Store');
             setShops(normalized);
+            writeShopCache(loc.lat, loc.lng, mi, normalized);
         } catch (e) {
             setError(e.message);
         } finally {
@@ -2633,13 +2790,20 @@ const ShopLocalSection = () => {
         });
     };
 
-    // Favorites float to top, then alphabetical
-    const sortedShops = useMemo(() => [...shops].sort((a, b) => {
-        const af = favorites.has(a.id) ? 1 : 0;
-        const bf = favorites.has(b.id) ? 1 : 0;
-        if (bf !== af) return bf - af;
-        return a.name.localeCompare(b.name);
-    }), [shops, favorites]);
+    // Favorites float to top, then nearest first
+    const sortedShops = useMemo(() => {
+        const withDistance = shops.map(s => ({
+            ...s,
+            distanceMi: location ? distanceMiles(location.lat, location.lng, s.lat, s.lon) : null,
+        }));
+        return withDistance.sort((a, b) => {
+            const af = favorites.has(a.id) ? 1 : 0;
+            const bf = favorites.has(b.id) ? 1 : 0;
+            if (bf !== af) return bf - af;
+            if (a.distanceMi != null && b.distanceMi != null) return a.distanceMi - b.distanceMi;
+            return a.name.localeCompare(b.name);
+        });
+    }, [shops, favorites, location]);
 
     return (
         <div>
@@ -2741,6 +2905,7 @@ const ShopLocalSection = () => {
                                     <Popup>
                                         <div style={{ minWidth: 130 }}>
                                             <strong style={{ fontSize: 13, display: 'block' }}>{shop.name}</strong>
+                                            {shop.distanceMi != null && <span style={{ fontSize: 11, color: '#888', display: 'block' }}>{shop.distanceMi.toFixed(1)} mi away</span>}
                                             {shop.address && <span style={{ fontSize: 11, color: '#888' }}>{shop.address}</span>}
                                         </div>
                                     </Popup>
@@ -2828,7 +2993,12 @@ const ShopLocalSection = () => {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex flex-col gap-0.5">
-                                            <p className="text-sm font-bold text-white group-hover:text-terracotta-300 transition-colors leading-tight">{shop.name}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-sm font-bold text-white group-hover:text-terracotta-300 transition-colors leading-tight">{shop.name}</p>
+                                                {shop.distanceMi != null && (
+                                                    <span className="text-[10px] font-bold text-stone-500 flex-shrink-0">{shop.distanceMi.toFixed(1)} mi</span>
+                                                )}
+                                            </div>
                                             {shop.source === 'web' && (
                                                 <span className="text-[9px] font-black uppercase tracking-wider text-terracotta-400 flex items-center gap-1">
                                                     <Globe size={10} /> Found via Web
@@ -2859,7 +3029,7 @@ const ShopLocalSection = () => {
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
-    { id: 'vinylNews',          label: 'Vinyl News',          icon: Newspaper, requiresAuth: false },
+    { id: 'vinylNews',          label: 'Music News',          icon: Newspaper, requiresAuth: false },
     { id: 'newReleases',        label: 'Upcoming Releases',   icon: Disc3,     requiresAuth: false },
     { id: 'completeCollection', label: 'Complete Collection', icon: Library,   requiresAuth: true  },
     { id: 'wantlist',           label: 'Wantlist',            icon: Heart,     requiresAuth: true  },

@@ -9,13 +9,13 @@
 // Discogs ToS: content must not be displayed if >6 hours stale (TTL = 6h).
 // Enrichment calls use app-level auth (consumer key/secret) — no user token needed.
 
-import * as cheerio from 'cheerio';
 import { readFile, writeFile } from 'fs/promises';
 
 const UPCOMING_URL = 'https://upcomingvinyl.com/featured';
 const DISCOGS_SEARCH = 'https://api.discogs.com/database/search';
 const USER_AGENT = 'SpinVinyl/1.0 +https://spinvinyl.app';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours — Discogs ToS maximum
+const EMPTY_RESULT_TTL_MS = 5 * 60 * 1000; // 5 minutes — don't let a transient scrape/fallback failure poison the cache for hours
 const CACHE_FILE = '/tmp/spinvinyl_upcoming_enriched.json';
 const ENRICH_LIMIT = 40;    // max releases to enrich per cycle
 const BATCH_SIZE = 5;       // parallel Discogs calls per batch
@@ -34,15 +34,15 @@ const REQUEST_BUDGET_MS = 6000;
 // ─── In-memory cache (warm-container fast path) ───────────────────────────────
 let memCache = null; // { data: [...], fetchedAt: ISO string, fallback?: boolean }
 
-const isFresh = (fetchedAt) =>
-    fetchedAt && (Date.now() - new Date(fetchedAt).getTime()) < CACHE_TTL_MS;
+const isFresh = (payload) =>
+    payload?.fetchedAt && (Date.now() - new Date(payload.fetchedAt).getTime()) < (payload.ttlMs ?? CACHE_TTL_MS);
 
 // ─── /tmp file cache (survives container restarts) ────────────────────────────
 async function readFileCache() {
     try {
         const raw = await readFile(CACHE_FILE, 'utf8');
         const parsed = JSON.parse(raw);
-        if (isFresh(parsed.fetchedAt)) return parsed;
+        if (isFresh(parsed)) return parsed;
     } catch { /* miss */ }
     return null;
 }
@@ -124,7 +124,13 @@ const parseDate = (str) => {
 //   "April 19, 2026"  "April 19, 2026 / Saturday"  "April 19"  "April 19 · Saturday"
 const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 
-function scrapeHTML(html) {
+// cheerio is imported dynamically (not statically at module scope) so that a
+// load failure surfaces as a catchable error inside the guarded scrape try/catch
+// below, rather than crashing the whole function invocation at cold start —
+// package.json's manual htmlparser2 override is evidence this exact dependency
+// has caused Vercel bundling trouble in this project before.
+async function scrapeHTML(html) {
+    const cheerio = await import('cheerio');
     const $ = cheerio.load(html);
     const releases = [];
     let currentDate = null;
@@ -267,7 +273,7 @@ export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
     // ── 1. In-memory cache (fastest) ─────────────────────────────────────────
-    if (memCache && isFresh(memCache.fetchedAt)) {
+    if (memCache && isFresh(memCache)) {
         res.setHeader('X-Cache', 'HIT-MEMORY');
         return res.status(200).json({
             releases: memCache.data,
@@ -306,19 +312,27 @@ export default async function handler(req, res) {
                 signal: AbortSignal.timeout(5000),
             });
             if (!htmlRes.ok) throw new Error(`HTTP ${htmlRes.status} from upcomingvinyl.com`);
-            scraped = scrapeHTML(await htmlRes.text());
+            scraped = await scrapeHTML(await htmlRes.text());
             console.log(`[Upcoming Vinyl] Scraped ${scraped.length} releases from upcomingvinyl.com`);
         } catch (err) {
             scrapeError = err.message;
             console.error('[Upcoming Vinyl] Primary scrape failed:', err.message);
         }
 
-        // Fallback: Discogs new vinyl if scraper yielded nothing
+        // Fallback: Discogs new vinyl if scraper yielded nothing. Skipped once the
+        // primary scrape has already burned through most of the request budget —
+        // starting a fresh 5s fetch at that point would just trade one timeout
+        // (scrape) for another (fallback) with no working response either way.
+        const FALLBACK_SUB_BUDGET_MS = 7000;
         if (scraped.length === 0 && process.env.DISCOGS_CONSUMER_KEY) {
-            console.log('[Upcoming Vinyl] Falling back to Discogs new vinyl...');
-            scraped = await fetchDiscogsNewVinyl();
-            isFallback = true;
-            console.log(`[Upcoming Vinyl] Discogs fallback returned ${scraped.length} releases`);
+            if (Date.now() - requestStart > FALLBACK_SUB_BUDGET_MS) {
+                console.warn('[Upcoming Vinyl] Skipping Discogs fallback — request budget already exceeded');
+            } else {
+                console.log('[Upcoming Vinyl] Falling back to Discogs new vinyl...');
+                scraped = await fetchDiscogsNewVinyl();
+                isFallback = true;
+                console.log(`[Upcoming Vinyl] Discogs fallback returned ${scraped.length} releases`);
+            }
         }
 
         // Enrich with Discogs artwork + genres (skip if already from Discogs fallback)
@@ -327,7 +341,10 @@ export default async function handler(req, res) {
             : scraped;
 
         const fetchedAt = new Date().toISOString();
-        const payload = { data: enriched, fetchedAt, fallback: isFallback };
+        // Empty results get a much shorter TTL — a transient scrape/fallback
+        // failure shouldn't poison the cache with "no releases" for a full 6 hours.
+        const ttlMs = enriched.length === 0 ? EMPTY_RESULT_TTL_MS : CACHE_TTL_MS;
+        const payload = { data: enriched, fetchedAt, fallback: isFallback, ttlMs };
 
         memCache = payload;
         await writeFileCache(payload);

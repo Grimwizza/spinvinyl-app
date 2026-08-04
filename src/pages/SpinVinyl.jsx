@@ -1132,7 +1132,11 @@ export const SpinVinyl = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [authUsername, setAuthUsername] = useState('');
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-    const [isGuestMode, setIsGuestMode] = useState(false);
+    // Defaults to true — unauthenticated visitors land straight on Explore (see
+    // checkAuth below) instead of a blocking "Connect to Discogs" gate. Real
+    // authenticated users get this flipped back to false as soon as checkAuth
+    // resolves, so they're never mistakenly treated as a guest.
+    const [isGuestMode, setIsGuestMode] = useState(true);
     const [showGuestModal, setShowGuestModal] = useState(false);
 
     // View & Sort State
@@ -1168,16 +1172,19 @@ export const SpinVinyl = () => {
                 const data = await res.json();
                 if (data.authenticated) {
                     setIsAuthenticated(true);
+                    setIsGuestMode(false); // required — otherwise this real user inherits the guest-by-default state and gets locked out of Collection/Stats
                     setAuthUsername(data.username);
                     pullFromCloud(data.username).catch(() => {});
                     getArchiveStatus(data.username).then(setArchiveStatus).catch(() => {});
                     getLastfmStatus().then(setLastfmStatus).catch(() => {});
                 } else {
                     setIsAuthenticated(false);
+                    setActivePage('releases'); // land unauthenticated visitors on Explore, not the auth-locked Collection default
                 }
             } catch (err) {
                 console.error('Auth check failed:', err);
                 setIsAuthenticated(false);
+                setActivePage('releases');
             } finally {
                 setIsCheckingAuth(false);
             }
@@ -1491,6 +1498,8 @@ export const SpinVinyl = () => {
         setIsAuthenticated(false);
         setReleases([]);
         setTotalItems(0);
+        setIsGuestMode(true);
+        setActivePage('releases'); // back to guest-mode Explore, not a dead-end gate
     }, []);
 
     // ─── Record a spin (local-first, synced across devices) ───────
@@ -1572,7 +1581,6 @@ export const SpinVinyl = () => {
         // all display sorting is client-side in filteredAndSorted.
     };
 
-    // ─── Render Unauthenticated State (Login Page) ──────────────
     if (isCheckingAuth) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-black text-white flex items-center justify-center">
@@ -1584,52 +1592,19 @@ export const SpinVinyl = () => {
         );
     }
 
-    if (!isAuthenticated && !isGuestMode) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-black text-white flex items-center justify-center p-6 relative overflow-hidden">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(196,98,45,0.15),transparent_60%)] pointer-events-none" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(201,162,75,0.1),transparent_50%)] pointer-events-none" />
-
-                <div className="max-w-md w-full relative z-10 text-center flex flex-col items-center">
-                    <Logo variant="full" size="xl" stacked className="mb-4" />
-
-
-                    <p className="text-stone-400 text-lg mb-10 max-w-sm mx-auto">
-                        Your physical record collection, beautifully visualized for a digital listening experience.
-                    </p>
-
-                    <PWAHelp />
-
-                    <a
-                        href="/api/discogs?action=login"
-                        className="w-full flex items-center justify-center gap-3 py-4 px-6 bg-terracotta-400 text-stone-950 rounded-xl font-bold text-lg hover:bg-terracotta-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-terracotta-500/20"
-                    >
-                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                            <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 3.3c4.805 0 8.7 3.895 8.7 8.7 0 4.805-3.895 8.7-8.7 8.7-4.805 0-8.7-3.895-8.7-8.7 0-4.805 3.895-8.7 8.7-8.7z" />
-                            <path d="M14.54 13.06c0-1.04-.62-1.74-1.66-1.74H10.1v3.48h2.78c1.04 0 1.66-.7 1.66-1.74zm-2.82.7h-1.62v-1.4h1.62c.48 0 .68.2.68.7s-.2.7-.68.7zm5.94-.7c0 1.76-1.22 2.84-2.92 2.84H8V9.9h6.74c1.7 0 2.92 1.08 2.92 2.84zm-1.16 0c0-1.04-.62-1.74-1.66-1.74h-2.78v3.48h2.78c1.04 0 1.66-.7 1.66-1.74z" />
-                        </svg>
-                        Connect to Discogs
-                    </a>
-
-                    <p className="text-xs text-stone-500 mt-6">
-                        Read-only access to view your collection.
-                    </p>
-
-                    <button
-                        onClick={() => { setIsGuestMode(true); setActivePage('releases'); }}
-                        className="mt-4 text-sm text-stone-500 hover:text-stone-300 transition-colors underline underline-offset-4"
-                    >
-                        Continue without signing in
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    // ─── Render Authenticated State ──────────────────────────────
+    // ─── Render Authenticated / Guest State ───────────────────────
+    // Unauthenticated visitors land here too (isGuestMode defaults true) —
+    // Explore is fully guest-accessible, and its own header already carries
+    // a "Sign in" CTA plus a locked-tab → Connect modal flow for anything
+    // that needs a real account, so no separate blocking gate is needed.
     return (
         <div className="min-h-screen bg-gradient-to-br from-stone-950 via-stone-900 to-black text-white pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))]">
             {/* ─── Page Router ──────────────────────────────── */}
+            {!isAuthenticated && activePage === 'releases' && (
+                <div className="max-w-3xl mx-auto px-4 pt-4">
+                    <PWAHelp />
+                </div>
+            )}
             {activePage === 'stats' && (
                 <StatsPage collectionCount={totalItems} releases={releases} />
             )}
