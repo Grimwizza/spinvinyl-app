@@ -126,9 +126,19 @@ const DATE_RE = /^([A-Z][a-z]+ \d{1,2},?\s*(?:\d{4})?)\s*(?:[/·-]\s*\w+)?$/;
 
 // cheerio is imported dynamically (not statically at module scope) so that a
 // load failure surfaces as a catchable error inside the guarded scrape try/catch
-// below, rather than crashing the whole function invocation at cold start —
-// package.json's manual htmlparser2 override is evidence this exact dependency
-// has caused Vercel bundling trouble in this project before.
+// below (falling through to the Discogs fallback), rather than crashing the
+// whole function invocation at cold start.
+//
+// Confirmed root cause (2026-08-04, via live scrapeError): cheerio's
+// dependency tree legitimately needs two different major versions of
+// `entities` side by side — dom-serializer/htmlparser2 need ^4.x, parse5
+// needs ^6.x — which npm resolves correctly via nested node_modules, but
+// Vercel's build tracer collapses to a single top-level copy, breaking
+// dom-serializer's `entities/lib/esm/index.js` import. See
+// `functions["api/upcoming.js"].includeFiles` in vercel.json, which
+// force-includes the real nested copies so the trace-collapse can't drop
+// them. package.json's `overrides.htmlparser2` pin is a leftover from an
+// earlier (incomplete) attempt at this same problem — safe to leave as is.
 async function scrapeHTML(html) {
     const cheerio = await import('cheerio');
     const $ = cheerio.load(html);
