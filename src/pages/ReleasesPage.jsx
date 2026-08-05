@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-le
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getWeeklyRecap } from '../lib/statsEngine.js';
+import { discogsFetch } from '../lib/discogsRateLimiter.js';
 
 // ─── Cache helpers ────────────────────────────────────────────────
 
@@ -1240,7 +1241,7 @@ const WantlistSection = () => {
 
                 const query = `${r.artist || ''} ${r.title || r.raw}`.trim();
                 try {
-                    const res = await fetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(query)}`);
+                    const res = await discogsFetch(`/api/discogs?action=searchRelease&q=${encodeURIComponent(query)}`);
                     const data = res.ok ? await res.json() : null;
                     const top = data?.results?.[0];
                     // Confidence check: the top result's title must contain the saved
@@ -1257,7 +1258,6 @@ const WantlistSection = () => {
                 } catch { /* ignore — will retry after the 24h cooldown */ }
 
                 if (current[r.raw]) current[r.raw] = { ...current[r.raw], _lastChecked: new Date().toISOString() };
-                await new Promise(res => setTimeout(res, 150));
             }
             if (!cancelled) saveUpcomingWantlist(current);
         };
@@ -1291,9 +1291,10 @@ const WantlistSection = () => {
         try {
             // Discogs paginates wants in batches of 100 — loop until every page is
             // fetched so wantlists over 100 items aren't silently truncated.
+            // Rate-limited: an uncapped 20-page burst had no throttling at all.
             let allWants = [];
             for (let page = 1; page <= 20; page++) {
-                const res = await fetch(`/api/discogs?action=getWantlist&page=${page}&perPage=100`);
+                const res = await discogsFetch(`/api/discogs?action=getWantlist&page=${page}&perPage=100`);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Failed');
                 allWants = allWants.concat(data.wants || []);
@@ -1856,12 +1857,14 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         }
         let allMasters = [];
         for (let p = 1; p <= 3; p++) {
-            const res = await fetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
+            // discogsFetch waits for a rate-limit slot before every call — a
+            // cache hit above never reaches this point, so no wait is ever
+            // spent on artists already covered by the 7-day cache.
+            const res = await discogsFetch(`/api/discogs?action=artistMasters&artist=${encodeURIComponent(artist.name)}&page=${p}`);
             if (!res.ok) break;
             const data = await res.json();
             allMasters = allMasters.concat(data.results || []);
             if (p >= (data.pagination?.pages ?? 1)) break;
-            await new Promise(r => setTimeout(r, 300));
         }
         const albumMasters = allMasters.filter(r => {
             const fmts = (r.format || []).map(f => f.toLowerCase());
@@ -1874,9 +1877,6 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         }
         const uniqueMasters = Array.from(seen.values());
         writeArtistMastersEntry(artist.id, uniqueMasters);
-        // Rate-limit only after a genuine live Discogs call — a cache hit
-        // above returns before this point and skips the wait entirely.
-        await new Promise(r => setTimeout(r, 150));
         return uniqueMasters;
     }, []);
 

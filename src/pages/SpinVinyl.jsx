@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Search, Disc3, Music2, Loader2, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, BarChart2, Compass, Barcode, Lock, Pencil, CheckCircle, Youtube, Play, Users, UserCheck, Undo2} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
@@ -7,15 +7,29 @@ import { fetchReleaseDetail } from '../lib/releaseCache.js';
 import { buildArchiveItem, pushArchiveItem, backfillCollectionArchive, getArchiveStatus, getLendingStatus, updateLendingStatus } from '../lib/collectionArchive.js';
 import { exportAllDataAsJson, exportCollectionAsCsv } from '../lib/dataExport.js';
 import { getLastfmStatus, disconnectLastfm, scrobbleLastfm } from '../lib/lastfm.js';
-import StatsPage from './StatsPage.jsx';
-import ReleasesPage from './ReleasesPage.jsx';
-import BarcodeScanner from '../components/BarcodeScanner.jsx';
+// Lazy-loaded: each pulls in enough (Leaflet + react-leaflet for
+// ReleasesPage, @zxing/browser for BarcodeScanner) that splitting them into
+// their own chunks meaningfully shrinks the initial bundle every visitor
+// downloads, regardless of whether they ever open Stats, Explore, the
+// scanner, or the manual add/edit form.
+const StatsPage = lazy(() => import('./StatsPage.jsx'));
+const ReleasesPage = lazy(() => import('./ReleasesPage.jsx'));
+const BarcodeScanner = lazy(() => import('../components/BarcodeScanner.jsx'));
+const CollectionItemEditor = lazy(() => import('../components/CollectionItemEditor.jsx'));
 import RecommendWidget from '../components/RecommendWidget.jsx';
 import AccountSheet from '../components/AccountSheet.jsx';
 import CrateView from '../components/CrateView.jsx';
 import AlphaNav, { SectionDivider, groupByLetter } from '../components/AlphaNav.jsx';
-import CollectionItemEditor from '../components/CollectionItemEditor.jsx';
 import Logo from '../components/Logo.jsx';
+
+// ─── Lazy-load fallback ─────────────────────────────────────────
+// Matches the visual language already used for other loading states in this
+// file (Loader2 + terracotta-400, e.g. the price/lyrics spinners).
+const LazyFallback = ({ minHeight = '50vh' }) => (
+    <div className="flex items-center justify-center" style={{ minHeight }}>
+        <Loader2 size={28} className="text-terracotta-400 animate-spin" />
+    </div>
+);
 
 // ─── PWA Help / Installation Instructions ──────────────────────
 const PWAHelp = () => {
@@ -697,31 +711,33 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
                 onClick={e => e.stopPropagation()}
             >
               {editing ? (
-                <CollectionItemEditor
-                    release={{
-                        id: release.id,
-                        title: info.title,
-                        thumb: info.thumb || info.cover_image,
-                        year: info.year,
-                        format: (info.formats || []).map(f => f.name),
-                    }}
-                    mode="edit"
-                    instanceId={release.instance_id}
-                    initialValues={{
-                        folderId: String(release.folder_id ?? '1'),
-                        rating: release.rating || 0,
-                        fields: release.notes || [],
-                    }}
-                    folders={folders}
-                    collectionFields={collectionFields}
-                    onCancel={() => setEditing(false)}
-                    onSaved={(updatedRelease, payload) => {
-                        setEditing(false);
-                        onItemEdited?.(release.instance_id, payload);
-                        const item = buildArchiveItem(release, { ...payload, instanceId: release.instance_id }, { provenance: 'edit' });
-                        pushArchiveItem(item, authUsername);
-                    }}
-                />
+                <Suspense fallback={<LazyFallback minHeight="300px" />}>
+                    <CollectionItemEditor
+                        release={{
+                            id: release.id,
+                            title: info.title,
+                            thumb: info.thumb || info.cover_image,
+                            year: info.year,
+                            format: (info.formats || []).map(f => f.name),
+                        }}
+                        mode="edit"
+                        instanceId={release.instance_id}
+                        initialValues={{
+                            folderId: String(release.folder_id ?? '1'),
+                            rating: release.rating || 0,
+                            fields: release.notes || [],
+                        }}
+                        folders={folders}
+                        collectionFields={collectionFields}
+                        onCancel={() => setEditing(false)}
+                        onSaved={(updatedRelease, payload) => {
+                            setEditing(false);
+                            onItemEdited?.(release.instance_id, payload);
+                            const item = buildArchiveItem(release, { ...payload, instanceId: release.instance_id }, { provenance: 'edit' });
+                            pushArchiveItem(item, authUsername);
+                        }}
+                    />
+                </Suspense>
               ) : (
                 <>
                 {/* Header with album art */}
@@ -1628,15 +1644,19 @@ export const SpinVinyl = () => {
                 </div>
             )}
             {activePage === 'stats' && (
-                <StatsPage collectionCount={totalItems} releases={releases} />
+                <Suspense fallback={<LazyFallback />}>
+                    <StatsPage collectionCount={totalItems} releases={releases} />
+                </Suspense>
             )}
             {activePage === 'releases' && (
-                <ReleasesPage
-                    releases={releases}
-                    collectionLoading={loading}
-                    isAuthenticated={isAuthenticated}
-                    onRequireLogin={() => setShowGuestModal(true)}
-                />
+                <Suspense fallback={<LazyFallback />}>
+                    <ReleasesPage
+                        releases={releases}
+                        collectionLoading={loading}
+                        isAuthenticated={isAuthenticated}
+                        onRequireLogin={() => setShowGuestModal(true)}
+                    />
+                </Suspense>
             )}
             {/* Collection page (always rendered, hidden when other tab active) */}
             <div className={activePage !== 'collection' ? 'hidden' : ''}>
@@ -2084,16 +2104,18 @@ export const SpinVinyl = () => {
 
             {/* Barcode scanner modal */}
             {showScanner && (
-                <BarcodeScanner
-                    onClose={() => setShowScanner(false)}
-                    clearCollectionCache={clearCollectionCache}
-                    authUsername={authUsername}
-                    onAddSuccess={() => {
-                        // BarcodeScanner shows its own brief "Added ✓" confirmation and returns
-                        // to scanning/searching — the modal only closes via its own close button
-                        // now, so a whole stack of records can be added in one session.
-                    }}
-                />
+                <Suspense fallback={<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black"><LazyFallback minHeight="auto" /></div>}>
+                    <BarcodeScanner
+                        onClose={() => setShowScanner(false)}
+                        clearCollectionCache={clearCollectionCache}
+                        authUsername={authUsername}
+                        onAddSuccess={() => {
+                            // BarcodeScanner shows its own brief "Added ✓" confirmation and returns
+                            // to scanning/searching — the modal only closes via its own close button
+                            // now, so a whole stack of records can be added in one session.
+                        }}
+                    />
+                </Suspense>
             )}
 
             <AccountSheet
