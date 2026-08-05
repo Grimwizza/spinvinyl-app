@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Disc3, Music2, Loader2, ChevronLeft, ChevronRight, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, Info, BarChart2, Newspaper, Compass, ScanLine, Barcode, Lock, Pencil, CheckCircle, RefreshCw, Database, Youtube, Play, Users, UserCheck, Undo2} from 'lucide-react';
+import { Search, Disc3, Music2, Loader2, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, BarChart2, Compass, Barcode, Lock, Pencil, CheckCircle, Youtube, Play, Users, UserCheck, Undo2} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
 import { fetchReleasePrice } from '../lib/priceCache.js';
@@ -12,7 +12,7 @@ import BarcodeScanner from '../components/BarcodeScanner.jsx';
 import RecommendWidget from '../components/RecommendWidget.jsx';
 import AccountSheet from '../components/AccountSheet.jsx';
 import CrateView from '../components/CrateView.jsx';
-import AlphaNav, { SectionDivider, groupByLetter, isAlphaSort } from '../components/AlphaNav.jsx';
+import AlphaNav, { SectionDivider, groupByLetter } from '../components/AlphaNav.jsx';
 import CollectionItemEditor from '../components/CollectionItemEditor.jsx';
 import Logo from '../components/Logo.jsx';
 
@@ -373,7 +373,14 @@ const AlbumArt = ({ release, alt, className, fallbackSize = 40, fallbackGradient
             });
         }
         return () => { mounted = false; };
-    }, [defaultImg, title, artist, info]);
+        // `info` is intentionally excluded — it's a fresh object every render
+        // whenever `release.basic_information` is falsy, which would make this
+        // effect re-run on every render for such releases. It's only read here
+        // for its mutation side-effect (caching the fetched art back onto the
+        // release), not to decide whether a fetch is needed — that's fully
+        // determined by defaultImg/title/artist, which are already tracked.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [defaultImg, title, artist]);
 
     if (imgSrc) {
         return <img src={imgSrc} alt={alt || title} className={className} loading="lazy" />;
@@ -1212,7 +1219,12 @@ export const SpinVinyl = () => {
                     const checkRes = await fetch(
                         `/api/discogs?action=collection&page=1&per_page=100&sort=added&sort_order=desc`
                     );
-                    if (checkRes.status === 401) { setIsAuthenticated(false); return; }
+                    // Session expired between visits — also flip isGuestMode
+                    // (not just isAuthenticated), otherwise the bottom-nav
+                    // lock check (`isGuestMode && tab.requiresAuth`) stays
+                    // false and Collection/Stats look unlocked even though
+                    // they're no longer accessible.
+                    if (checkRes.status === 401) { setIsAuthenticated(false); setIsGuestMode(true); return; }
                     if (!checkRes.ok) return; // network hiccup — keep using cache
 
                     const checkData = await checkRes.json();
@@ -1280,6 +1292,7 @@ export const SpinVinyl = () => {
             );
             if (res1.status === 401) {
                 setIsAuthenticated(false);
+                setIsGuestMode(true); // see comment on the other 401 handler above
                 throw new Error('Session expired. Please log in again.');
             }
             if (!res1.ok) throw new Error(`API error: ${res1.status}`);
@@ -1321,8 +1334,17 @@ export const SpinVinyl = () => {
     useEffect(() => {
         if (isAuthenticated) {
             fetchCollection();
+        } else if (!isCheckingAuth) {
+            // Only once the auth check has actually resolved to "no session"
+            // — isAuthenticated also defaults to false during the brief
+            // isCheckingAuth window, and firing this then would prematurely
+            // clear `loading` for users about to be confirmed authenticated.
+            // Guests have no collection to load — without this, `loading`
+            // (which starts true) never flips to false, leaving "Loading
+            // your collection…" stuck on-screen permanently in Explore.
+            setLoading(false);
         }
-    }, [fetchCollection, isAuthenticated]);
+    }, [fetchCollection, isAuthenticated, isCheckingAuth]);
 
     // Close sort menu on outside click
     useEffect(() => {

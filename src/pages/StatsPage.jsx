@@ -61,7 +61,7 @@ const ListeningCalendar = ({ dayMap }) => {
     // Month labels — find first day of each month in the weeks
     const monthLabels = [];
     weeks.forEach((week, wi) => {
-        week.forEach((day, di) => {
+        week.forEach((day) => {
             if (day.endsWith('-01')) {
                 const m = parseInt(day.slice(5, 7), 10) - 1;
                 monthLabels.push({ week: wi, label: MONTHS[m] });

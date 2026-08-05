@@ -111,13 +111,18 @@ const parseRSSFeed = (xml, source) => {
 };
 
 // ─── Feed Sources ─────────────────────────────────────────────────
-// Vinyl-focused: Vinyl Factory, Analog Planet, Bandcamp Daily
+// Vinyl-focused: Analog Planet, Bandcamp Daily
 // Popular artists + tours: Rolling Stone, BrooklynVegan, Consequence, Stereogum
 // Broad music news: Pitchfork, NME
+//
+// Vinyl Factory (thevinylfactory.com) was removed 2026-08-04 — their site
+// migrated to Webflow and dropped RSS entirely (confirmed: /feed and every
+// plausible alternate path all 404; the old feed was a genuine, permanent
+// 404 in production, not a transient outage). Re-add if they ever publish
+// a working feed again.
 
 const FEEDS = [
     // Vinyl & collector-focused
-    { url: 'https://thevinylfactory.com/feed/',                             source: 'Vinyl Factory'  },
     { url: 'https://www.analogplanet.com/rss.xml',                          source: 'Analog Planet'  },
     { url: 'https://daily.bandcamp.com/feed',                               source: 'Bandcamp Daily' },
     // Popular artists, new releases & tours

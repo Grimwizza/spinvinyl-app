@@ -26,8 +26,19 @@ export default async function handler(req, res) {
         const zip = url.searchParams.get('zip');
         if (!zip) return res.status(400).json({ error: 'Missing zip code' });
         try {
+            // A bare 5-digit (or ZIP+4) US zip code is globally ambiguous as an
+            // unstructured search term — Nominatim can rank a same-numbered
+            // postal code in another country ahead of the intended US one (e.g.
+            // "90210" resolving to a village in Ukraine instead of Beverly
+            // Hills). Structured postalcode+country params disambiguate this;
+            // free-text queries (city/state names) fall through to the
+            // original unstructured search, which already works correctly.
+            const isBareUSZip = /^\d{5}(-\d{4})?$/.test(zip.trim());
+            const geoQuery = isBareUSZip
+                ? `postalcode=${encodeURIComponent(zip.trim())}&country=us`
+                : `q=${encodeURIComponent(zip)}`;
             const geoRes = await fetch(
-                `${NOMINATIM_URL}/search?q=${encodeURIComponent(zip)}&format=json&limit=1&addressdetails=1`,
+                `${NOMINATIM_URL}/search?${geoQuery}&format=json&limit=1&addressdetails=1`,
                 { headers: { 'User-Agent': USER_AGENT } },
             );
             const data = await geoRes.json();

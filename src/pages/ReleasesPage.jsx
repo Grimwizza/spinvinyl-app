@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Disc3, Music2, ExternalLink, Heart, HeartOff, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X, Flame, CalendarDays } from 'lucide-react';
+import { Newspaper, Disc3, Music2, ExternalLink, Heart, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X, Flame, CalendarDays } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -118,7 +118,6 @@ const CompletionRing = ({ pct, size = 56 }) => {
     const circ = 2 * Math.PI * r;
     const dash = Math.max(0, (pct / 100) * circ);
     const cx = size / 2, cy = size / 2;
-    const color = pct >= 75 ? '#34d399' : pct >= 40 ? '#D97748' : '#D9B463';
 
     return (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
@@ -1099,7 +1098,7 @@ const VinylNewsSection = ({ ownedArtistNames, ownedGenres }) => {
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-base font-bold text-white">Music News</h2>
-                    <p className="text-xs text-stone-500 mt-0.5">Vinyl releases, artist news, and album drops from 9 trusted sources</p>
+                    <p className="text-xs text-stone-500 mt-0.5">Vinyl releases, artist news, and album drops from 8 trusted sources</p>
                 </div>
                 <button
                     onClick={() => fetchNews(true)}
@@ -1994,7 +1993,7 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         if (wasLoading && !collectionLoading) clearCache(CACHE_KEYS.gaps);
     }, [collectionLoading]);
 
-    useEffect(() => { if (collectionArtists.length && !collectionLoading) fetchGaps(); }, [fetchGaps, collectionLoading]);
+    useEffect(() => { if (collectionArtists.length && !collectionLoading) fetchGaps(); }, [fetchGaps, collectionLoading, collectionArtists.length]);
 
     // Add an artist from the search picker — fetches on demand if not already loaded
     const handleSelectArtist = useCallback(async (artist) => {

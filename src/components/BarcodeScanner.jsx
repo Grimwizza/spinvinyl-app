@@ -73,6 +73,14 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const isMountedRef     = useRef(true);
     const activeDecoderRef = useRef(null);   // 'native' | 'zxing' | null — which backend currently owns the stream
     const rafIdRef         = useRef(null);   // requestAnimationFrame id for the native polling loop
+    // True only while camera-scan mode is the thing the user actually wants right
+    // now. startNativeScanning/startZxingScanning have async gaps (getUserMedia,
+    // decodeFromConstraints) — if the user taps "Search"/"Matrix"/"Photo" while one
+    // of those is still in flight, isMountedRef alone doesn't catch it (the
+    // component is still mounted, just showing a different mode), so the stale
+    // continuation would otherwise reactivate the camera and stomp the phase the
+    // user just switched to. stopCamera() clears this; startLiveScanning() sets it.
+    const wantScanningRef  = useRef(false);
     const photoInputRef    = useRef(null);   // hidden <input type=file> for AI cover-photo capture
 
     // 'init' | 'scanning' | 'searchInput' | 'identifying' | 'searching' | 'results' | 'empty' | 'error' | 'unsupported' | 'editDetails'
@@ -144,6 +152,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     }, []);
 
     const stopCamera = () => {
+        wantScanningRef.current = false;
         if (rafIdRef.current) {
             cancelAnimationFrame(rafIdRef.current);
             rafIdRef.current = null;
@@ -266,9 +275,10 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
             }
         );
 
-        // The scanner may have been closed (or "Search" tapped) while the camera was still
-        // starting up — if so, stop the stream immediately instead of leaving it running.
-        if (!isMountedRef.current) {
+        // The scanner may have been closed, or the user switched to Search/Matrix/
+        // Photo mode, while the camera was still starting up — if so, stop the
+        // stream immediately instead of leaving it running behind the new view.
+        if (!isMountedRef.current || !wantScanningRef.current) {
             try { controls.stop(); } catch { /* ignore */ }
             return;
         }
@@ -284,13 +294,23 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
     const startNativeScanning = useCallback(async () => {
         const stream = await navigator.mediaDevices.getUserMedia(CAMERA_CONSTRAINTS);
 
-        if (!isMountedRef.current) {
+        if (!isMountedRef.current || !wantScanningRef.current) {
             stream.getTracks().forEach(t => { try { t.stop(); } catch { /* ignore */ } });
             return;
         }
 
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+
+        // Re-check after the second await — the user may have switched to
+        // Search/Matrix/Photo mode in the gap between assigning srcObject and
+        // play() resolving. stopCamera() already ran (and missed this stream,
+        // since srcObject wasn't assigned yet when it ran), so clean up here.
+        if (!isMountedRef.current || !wantScanningRef.current) {
+            stream.getTracks().forEach(t => { try { t.stop(); } catch { /* ignore */ } });
+            if (videoRef.current) videoRef.current.srcObject = null;
+            return;
+        }
 
         activeDecoderRef.current = 'native';
         setPhase('scanning');
@@ -319,6 +339,7 @@ export default function BarcodeScanner({ onClose, onAddSuccess, clearCollectionC
 
     const startLiveScanning = useCallback(async () => {
         hasScannedRef.current = false;
+        wantScanningRef.current = true;
         setPhase('init');
 
         try {

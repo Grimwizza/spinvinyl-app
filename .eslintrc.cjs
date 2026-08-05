@@ -7,7 +7,11 @@ module.exports = {
     'plugin:react/jsx-runtime',
     'plugin:react-hooks/recommended',
   ],
-  ignorePatterns: ['dist', '.eslintrc.cjs'],
+  // api/_vendor holds byte-for-byte vendored third-party code (see
+  // api/_vendor/entities/README.md) — not first-party, shouldn't be linted
+  // as if it were (its inline disable-comments reference plugins this
+  // project doesn't install, which otherwise throws fatal config errors).
+  ignorePatterns: ['dist', '.eslintrc.cjs', 'api/_vendor'],
   parserOptions: { ecmaVersion: 'latest', sourceType: 'module' },
   settings: { react: { version: '18.2' } },
   plugins: ['react-refresh'],
