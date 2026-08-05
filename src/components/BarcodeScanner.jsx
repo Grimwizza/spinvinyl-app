@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { X, CheckCircle, Loader2, Plus, Disc, ScanLine, Camera, Sparkles } from 'lucide-react';
 import CollectionItemEditor from './CollectionItemEditor';
 import { buildArchiveItem, pushArchiveItem } from '../lib/collectionArchive.js';

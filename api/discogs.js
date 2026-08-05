@@ -47,7 +47,7 @@ export default async function handler(req, res) {
     }
 
     if (!process.env.DISCOGS_CONSUMER_KEY || !process.env.DISCOGS_CONSUMER_SECRET) {
-        return res.status(500).json({ error: 'OAuth credentials not set in environment.' });
+        return res.status(503).json({ error: 'OAuth credentials not set in environment.' });
     }
 
     const host = req.headers.host || 'localhost:5173';

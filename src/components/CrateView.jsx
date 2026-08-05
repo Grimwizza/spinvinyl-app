@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Music2 } from 'lucide-react';
 
 // ─── Constants ───────────────────────────────────────────────────

@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     // process.env had at that first call and never see later .env edits.
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) {
-        return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set in environment.' });
+        return res.status(503).json({ error: 'ANTHROPIC_API_KEY not set in environment.' });
     }
 
     let payload = {};

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 // ─── Constants ─────────────────────────────────────────────────
 const ALPHABET = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
@@ -43,7 +43,7 @@ export const SectionDivider = ({ letter, count }) => (
 );
 
 // ─── AlphaRail (sidebar) ───────────────────────────────────────
-export default function AlphaNav({ items, sortField, sortOrder, onJumpToLetter, onJumpToCrateIndex }) {
+export default function AlphaNav({ items, sortField, onJumpToLetter, onJumpToCrateIndex }) {
     const isAlpha = ALPHA_SORT_FIELDS.has(sortField);
     const railRef = useRef(null);
     const [activeLetter, setActiveLetter] = useState(null);

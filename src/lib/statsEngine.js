@@ -99,7 +99,23 @@ export const recordSession = (session) => {
 
 // ─── Queries ─────────────────────────────────────────────────────
 
-const toDateStr = (date) => date.toISOString().slice(0, 10);
+// Converts a Date object or an ISO-8601 timestamp string to a LOCAL calendar
+// date string ("YYYY-MM-DD"). Session `startTime` values are stored as full
+// ISO strings (absolute instants, via `new Date().toISOString()`), so
+// `new Date(iso)` parses them correctly; getFullYear/getMonth/getDate then
+// read that instant back out in the browser's local timezone — unlike
+// `.toISOString().slice(0, 10)` or slicing an ISO string directly, both of
+// which read the UTC calendar date. For anyone west of UTC (the US), the
+// UTC-based version could bucket a late-evening spin into "tomorrow",
+// shifting streaks and "today"/"this week" counts. All date-bucketing in
+// this file goes through this one function for consistency.
+const toDateStr = (dateOrIso) => {
+    const d = typeof dateOrIso === 'string' ? new Date(dateOrIso) : dateOrIso;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
 
 /** Number of spins logged in a given period. period: 'today' | 'week' | 'month' | 'year' | 'all' */
 export const getPeriodSpinCount = (period) => {
@@ -116,7 +132,7 @@ export const getPeriodSpinCount = (period) => {
 
     return stats.sessions
         .filter(s => {
-            const d = s.startTime?.slice(0, 10);
+            const d = s.startTime ? toDateStr(s.startTime) : null;
             if (!d) return false;
             if (period === 'today') return d === today;
             if (period === 'week') return d >= weekStartStr;
@@ -168,7 +184,7 @@ export const getDayMap = () => {
     const stats = getStoredStats();
     const map = {};
     stats.sessions.forEach(s => {
-        const day = s.startTime?.slice(0, 10);
+        const day = s.startTime ? toDateStr(s.startTime) : null;
         if (day) map[day] = (map[day] || 0) + 1;
     });
     return map;
@@ -187,7 +203,7 @@ export const getUniqueDecadesSpun = () => Object.keys(getStoredStats().decadePla
 export const getCurrentStreak = () => {
     const stats = getStoredStats();
     if (!stats.sessions.length) return 0;
-    const days = [...new Set(stats.sessions.map(s => s.startTime?.slice(0, 10)).filter(Boolean))].sort().reverse();
+    const days = [...new Set(stats.sessions.map(s => s.startTime ? toDateStr(s.startTime) : null).filter(Boolean))].sort().reverse();
     const today = toDateStr(new Date());
     const yesterday = toDateStr(new Date(Date.now() - 86400000));
     if (days[0] !== today && days[0] !== yesterday) return 0;
@@ -203,7 +219,7 @@ export const getCurrentStreak = () => {
 /** Number of unique calendar days with at least one session. */
 export const getUniqueDays = () => {
     const stats = getStoredStats();
-    return new Set(stats.sessions.map(s => s.startTime?.slice(0, 10)).filter(Boolean)).size;
+    return new Set(stats.sessions.map(s => s.startTime ? toDateStr(s.startTime) : null).filter(Boolean)).size;
 };
 
 /**
@@ -222,7 +238,7 @@ export const getWeeklyRecap = () => {
     const firstSeenByArtist = new Map();
     stats.sessions.forEach(s => {
         if (!s.artist || !s.startTime) return;
-        const day = s.startTime.slice(0, 10);
+        const day = toDateStr(s.startTime);
         if (!firstSeenByArtist.has(s.artist) || day < firstSeenByArtist.get(s.artist)) {
             firstSeenByArtist.set(s.artist, day);
         }

@@ -13,9 +13,22 @@ const triggerDownload = (filename, content, mimeType) => {
     URL.revokeObjectURL(url);
 };
 
+// Discogs' own shapes for genre/style are plain string arrays, but format/label
+// are arrays of objects ({ name, qty, ... } / { name, catno, ... }) — flatten
+// those down to just the readable name(s) instead of dumping raw JSON into a
+// spreadsheet cell.
+const flattenForCsv = (val) => {
+    if (val == null) return '';
+    if (Array.isArray(val)) {
+        return val.map(flattenForCsv).filter(Boolean).join(', ');
+    }
+    if (typeof val === 'object') return val.name ?? JSON.stringify(val);
+    return String(val);
+};
+
 const csvEscape = (val) => {
     if (val == null) return '';
-    const s = typeof val === 'object' ? JSON.stringify(val) : String(val);
+    const s = flattenForCsv(val);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

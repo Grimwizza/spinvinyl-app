@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Newspaper, Disc3, Music2, ExternalLink, Heart, Loader2, RefreshCw, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Bookmark, Trash2, Compass, LayoutList, LayoutGrid, Library, MapPin, Phone, Globe, Store, Navigation, Search, Map as MapIcon, Lock, X, Flame, CalendarDays } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -173,7 +173,7 @@ const normalizeArtist = (name) =>
 // Strip edition/pressing qualifiers so "Whirlwind Deluxe" and "Whirlwind" compare equal.
 const normalizeTitle = (title) => {
     // Remove parenthetical/bracketed edition markers: (Deluxe Edition), [Remastered], etc.
-    const inParens = /\s*[\(\[][^)\]]*\b(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited|edition|version|mix)\b[^)\]]*[\)\]]/gi;
+    const inParens = /\s*[([][^)\]]*\b(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited|edition|version|mix)\b[^)\]]*[)\]]/gi;
     // Remove trailing edition words, optionally preceded by a separator: "Deluxe", "- Deluxe Edition", ": Remastered"
     const trailing = /[\s:–—-]+(?:super\s+)?(?:deluxe|remaster(?:ed)?|expand(?:ed)?|anniversary|special|bonus|explicit|complete|collector|limited)(?:\s+(?:edition|version))?\s*$/i;
     return (title || '')
@@ -1969,11 +1969,11 @@ const CompleteCollectionSection = ({ collectionArtists, ownedMasterIds, ownedTit
         if (showCompleteRef.current) fetchExtraArtists(gapData);
     }, [collectionArtists, fetchArtistGap, fetchExtraArtists]);
 
-    const fetchRunRef = React.useRef(0);
-    const extraRunRef = React.useRef(0);
-    const pinnedArtistIdsRef = React.useRef(pinnedArtistIds);
-    const showCompleteRef = React.useRef(showComplete);
-    const prevCollectionLoadingRef = React.useRef(collectionLoading);
+    const fetchRunRef = useRef(0);
+    const extraRunRef = useRef(0);
+    const pinnedArtistIdsRef = useRef(pinnedArtistIds);
+    const showCompleteRef = useRef(showComplete);
+    const prevCollectionLoadingRef = useRef(collectionLoading);
 
     // Keep refs in sync so callbacks can read latest values without dep-array churn
     useEffect(() => { pinnedArtistIdsRef.current = pinnedArtistIds; }, [pinnedArtistIds]);
@@ -2485,6 +2485,28 @@ const writeShopCache = (lat, lng, mi, shops) => {
     } catch { /* non-fatal — just skip caching */ }
 };
 
+// A zip/city's coordinates never change, so this can cache far longer than
+// the shop-search results above — mainly to avoid re-hitting Nominatim's
+// free, rate-limited service for a query someone's already searched.
+const GEOCODE_CACHE_KEY = 'spinvinyl_geocode_cache_v1';
+const GEOCODE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+const readGeocodeCache = (query) => {
+    try {
+        const all = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || '{}');
+        const entry = all[query.trim().toLowerCase()];
+        if (entry && Date.now() - entry.fetchedAt < GEOCODE_CACHE_TTL_MS) return entry.location;
+    } catch { /* miss */ }
+    return null;
+};
+const writeGeocodeCache = (query, location) => {
+    try {
+        const all = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || '{}');
+        all[query.trim().toLowerCase()] = { location, fetchedAt: Date.now() };
+        localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(all));
+    } catch { /* non-fatal — just skip caching */ }
+};
+
 // Leaflet custom marker icons (created lazily to avoid SSR issues)
 const createShopIcon = (highlighted = false) => {
     const size = highlighted ? 36 : 30;
@@ -2660,6 +2682,16 @@ const ShopLocalSection = () => {
     const [selectedShop, setSelectedShop] = useState(null);
     const [showMap, setShowMap] = useState(false);
     const [favorites, setFavorites] = useState(() => loadShopFavorites());
+    const [slowSearch, setSlowSearch] = useState(false);
+
+    // Overpass (the free, public shop-search API) can genuinely take
+    // several seconds — surface a "still searching" note after 3s so a
+    // first-time guest doesn't assume the generic skeleton means it's stuck.
+    useEffect(() => {
+        if (!loading) { setSlowSearch(false); return; }
+        const t = setTimeout(() => setSlowSearch(true), 3000);
+        return () => clearTimeout(t);
+    }, [loading]);
 
     const searchShops = useCallback(async (loc, mi) => {
         const cached = readShopCache(loc.lat, loc.lng, mi);
@@ -2748,10 +2780,17 @@ const ShopLocalSection = () => {
         setGeoLoading(true);
         setError(null);
         try {
+            const cached = readGeocodeCache(zip);
+            if (cached) {
+                setLocation(cached);
+                searchShops(cached, radius);
+                return;
+            }
             const res = await fetch(`/api/shops?action=geocode&zip=${encodeURIComponent(zip.trim())}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not find that location');
             const loc = { lat: data.lat, lng: data.lng, name: data.name };
+            writeGeocodeCache(zip, loc);
             setLocation(loc);
             searchShops(loc, radius);
         } catch (e) {
@@ -2938,6 +2977,9 @@ const ShopLocalSection = () => {
             {/* Loading skeletons */}
             {loading && (
                 <div className="space-y-3">
+                    {slowSearch && (
+                        <p className="text-center text-xs text-stone-500 pb-1">Still searching nearby shops…</p>
+                    )}
                     {Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} className="animate-pulse rounded-2xl bg-white/[0.03] border border-white/5 p-4 flex gap-4">
                             <div className="w-16 h-16 rounded-xl bg-white/10 flex-shrink-0" />
@@ -3265,9 +3307,13 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
                         <OnThisDayCard releases={releases} />
                     </>
                 )}
-                {activeTab === 'newReleases' && (
+                {/* Always mounted (not conditionally rendered like the other tabs) so its
+                    fetch starts as soon as Explore opens, not only once the user taps this
+                    tab — it's often the most compelling content for a first-time guest, and
+                    a cold-cache scrape+enrich cycle can take several seconds server-side. */}
+                <div className={activeTab === 'newReleases' ? '' : 'hidden'}>
                     <UpcomingReleasesSection collection={releases} collectionLoading={collectionLoading} />
-                )}
+                </div>
                 {activeTab === 'vinylNews' && (
                     <VinylNewsSection ownedArtistNames={ownedArtistNames} ownedGenres={ownedGenres} />
                 )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Loader2, Star } from 'lucide-react';
 
 // Discogs' fixed default field ids — always present in getCollectionFields' response.

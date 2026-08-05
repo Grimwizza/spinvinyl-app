@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Search, Disc3, Music2, Loader2, X, Disc, LayoutGrid, List, Box, ArrowUpDown, ChevronDown, Calendar, Tag, User, Shuffle, Star, Share, MoreVertical, Download, BarChart2, Compass, Barcode, Lock, Pencil, CheckCircle, Youtube, Play, Users, UserCheck, Undo2} from 'lucide-react';
 import { getStoredStats } from '../lib/statsEngine.js';
 import { recordSessionWithSync, pullFromCloud, flushOfflineQueue, getOfflineQueue } from '../lib/syncEngine.js';
 import { fetchReleasePrice } from '../lib/priceCache.js';
+import { fetchReleaseDetail } from '../lib/releaseCache.js';
 import { buildArchiveItem, pushArchiveItem, backfillCollectionArchive, getArchiveStatus, getLendingStatus, updateLendingStatus } from '../lib/collectionArchive.js';
 import { exportAllDataAsJson, exportCollectionAsCsv } from '../lib/dataExport.js';
 import { getLastfmStatus, disconnectLastfm, scrobbleLastfm } from '../lib/lastfm.js';
@@ -530,9 +531,8 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
         setLoading(true);
         setArtistInfo(null);
 
-        // Fetch release detail from Discogs
-        fetch(`/api/discogs?action=release&id=${release.id}`)
-            .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+        // Fetch release detail from Discogs (cached — see releaseCache.js)
+        fetchReleaseDetail(release.id)
             .then(data => {
                 setDetail(data);
                 // Fetch artist bio from Wikipedia (free, no auth)
@@ -644,7 +644,7 @@ const AlbumDetailModal = ({ release, onClose, onSpin, onArtistSearch, folders, c
     const cleanDiscogsText = (text) => {
         if (!text) return '';
         return text
-            .replace(/\[url=([^\]]+)\]([^\[]*)\[\/url\]/g, '$2')  // [url=...]text[/url] → text
+            .replace(/\[url=([^\]]+)\]([^[]*)\[\/url\]/g, '$2')  // [url=...]text[/url] → text
             .replace(/\[([a-z])\d+\]/gi, '')  // [a123] style refs
             .replace(/\[\/?\w+\]/g, '')  // other bbcode tags
             .replace(/\r\n/g, '\n')

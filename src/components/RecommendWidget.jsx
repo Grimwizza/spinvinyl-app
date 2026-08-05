@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Shuffle, Music2, Clock, ChevronLeft, X } from 'lucide-react';
 import {
     getForgottenGems,

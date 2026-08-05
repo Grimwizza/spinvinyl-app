@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { BarChart2, CheckCircle, Clock, Disc3, DollarSign, Music2, RefreshCw, TrendingUp } from 'lucide-react';
 import {
     getPeriodSpinCount, getTopAlbums, getGenreBreakdown, getDecadeBreakdown,
@@ -8,7 +8,17 @@ import { readPriceCache, fetchReleasePrice } from '../lib/priceCache.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-const toDateStr = (d) => d.toISOString().slice(0, 10);
+// Local calendar date, matching statsEngine.js's toDateStr — must stay
+// consistent since this builds the calendar grid's day keys and those get
+// matched against getDayMap()'s keys (also local-bucketed). Using
+// .toISOString() here (UTC) instead would silently mismatch by a day near
+// local midnight for anyone west of UTC.
+const toDateStr = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+};
 
 /** Build array of 371 days (53 weeks) ending today, aligned to Sunday. */
 const buildCalendarDays = () => {

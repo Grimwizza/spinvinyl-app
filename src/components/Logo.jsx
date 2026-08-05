@@ -1,4 +1,3 @@
-import React from 'react';
 
 // ─── Groove Mark ──────────────────────────────────────────────────────────────
 // Abstract mark: 3 concentric open arcs, gaps rotationally offset, evoking both a
