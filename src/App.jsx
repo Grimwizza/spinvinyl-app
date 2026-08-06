@@ -1,5 +1,6 @@
 import React from 'react';
 import { SpinVinyl } from './pages/SpinVinyl';
+import { captureException } from './lib/sentry.js';
 
 class ErrorBoundary extends React.Component {
     constructor(props) {
@@ -8,6 +9,9 @@ class ErrorBoundary extends React.Component {
     }
     static getDerivedStateFromError(error) {
         return { error };
+    }
+    componentDidCatch(error, errorInfo) {
+        captureException(error, { componentStack: errorInfo.componentStack });
     }
     render() {
         if (this.state.error) {
