@@ -3154,6 +3154,106 @@ const OnThisDayCard = ({ releases }) => {
     );
 };
 
+// ─── Locked Tab Preview ─────────────────────────────────────────────
+// Shown to guests tapping a requiresAuth tab, instead of an immediate hard
+// modal interrupt — a static, illustrative example of what the feature
+// looks like with real data (hand-authored placeholder content below, not
+// fetched from anywhere), so there's something to evaluate before deciding
+// to connect. Card markup deliberately mirrors the real
+// CompleteCollectionSection/WantlistSection styling so it reads as a
+// preview of the real thing, not a mismatched mockup.
+const LockedTabPreview = ({ icon: Icon, title, description, exampleLabel, children, onConnect }) => (
+    <div className="space-y-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-br from-terracotta-500 to-brass-500 flex items-center justify-center shadow-xl mb-3">
+                <Icon size={22} className="text-white" />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1">{title}</h3>
+            <p className="text-sm text-stone-400 max-w-sm mx-auto">{description}</p>
+        </div>
+
+        <div className="relative">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-stone-600 mb-2 px-1">{exampleLabel}</p>
+            <div className="opacity-70 pointer-events-none select-none space-y-3">
+                {children}
+            </div>
+            <div className="absolute inset-x-0 bottom-0 top-8 bg-gradient-to-b from-transparent via-stone-950/50 to-stone-950 pointer-events-none" />
+        </div>
+
+        <button
+            onClick={onConnect}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-terracotta-500 hover:bg-terracotta-400 text-stone-950 font-bold text-sm transition-colors active:opacity-80"
+        >
+            <Lock size={14} /> Connect Discogs to see your own
+        </button>
+    </div>
+);
+
+const CompleteCollectionPreview = ({ onConnect }) => (
+    <LockedTabPreview
+        icon={Library}
+        title="Complete Your Collection"
+        description="See exactly which albums you're missing from artists already in your collection."
+        exampleLabel="Example"
+        onConnect={onConnect}
+    >
+        {[
+            { name: 'Fleetwood Mac', owned: 8, missing: 3, total: 11, pct: 73 },
+            { name: 'Miles Davis', owned: 12, missing: 0, total: 12, pct: 100 },
+        ].map(a => (
+            <div key={a.name} className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+                <div className="w-full flex items-center gap-4 p-4">
+                    <CompletionRing pct={a.pct} size={56} />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{a.name}</p>
+                        <p className="text-xs text-stone-400 mt-0.5">
+                            <span className="text-green-400 font-bold">{a.owned}</span> owned ·{' '}
+                            <span className="text-brass-400 font-bold">{a.missing}</span> missing
+                            {' '}of <span className="text-stone-300 font-bold">{a.total}</span> vinyl albums
+                        </p>
+                        {a.pct === 100 && (
+                            <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-green-400">
+                                <CheckCircle size={10} /> Complete collection!
+                            </span>
+                        )}
+                    </div>
+                    <ChevronDown size={18} className="text-stone-500" />
+                </div>
+            </div>
+        ))}
+    </LockedTabPreview>
+);
+
+const WantlistPreview = ({ onConnect }) => (
+    <LockedTabPreview
+        icon={Heart}
+        title="Your Wantlist"
+        description="Records you've marked to complete your collection, synced straight from Discogs."
+        exampleLabel="Example"
+        onConnect={onConnect}
+    >
+        <div className="grid grid-cols-2 gap-3">
+            {[
+                { title: 'Kind of Blue', artist: 'Miles Davis', year: 1959 },
+                { title: 'Rumours', artist: 'Fleetwood Mac', year: 1977 },
+            ].map(r => (
+                <div key={r.title} className="rounded-2xl bg-white/[0.03] border border-white/5 overflow-hidden">
+                    <div className="aspect-square bg-stone-800 relative overflow-hidden flex items-center justify-center">
+                        <Disc3 size={32} className="text-stone-600" />
+                        <div className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                            {r.year}
+                        </div>
+                    </div>
+                    <div className="p-3">
+                        <p className="text-xs font-bold text-white truncate leading-tight">{r.title}</p>
+                        <p className="text-[11px] text-stone-400 truncate mt-0.5">{r.artist}</p>
+                    </div>
+                </div>
+            ))}
+        </div>
+    </LockedTabPreview>
+);
+
 // ─── Main ReleasesPage ────────────────────────────────────────────
 
 const TABS = [
@@ -3281,7 +3381,10 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
                         return (
                         <button
                             key={tab.id}
-                            onClick={() => isLocked ? onRequireLogin?.() : switchTab(tab.id)}
+                            // Locked tabs switch too now (showing a preview with a connect
+                            // CTA below) instead of hard-blocking with an immediate modal —
+                            // onRequireLogin is still reachable from inside that preview.
+                            onClick={() => switchTab(tab.id)}
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${
                                 activeTab === tab.id
                                     ? 'bg-terracotta-500/20 text-terracotta-300 border border-terracotta-500/30'
@@ -3318,16 +3421,24 @@ const ReleasesPage = ({ releases = [], collectionLoading = false, isAuthenticate
                     <VinylNewsSection ownedArtistNames={ownedArtistNames} ownedGenres={ownedGenres} />
                 )}
                 {activeTab === 'completeCollection' && (
-                    <CompleteCollectionSection
-                        collectionArtists={collectionArtists}
-                        ownedMasterIds={ownedMasterIds}
-                        ownedTitlesByArtist={ownedTitlesByArtist}
-                        collectionByArtist={collectionByArtist}
-                        collectionLoading={collectionLoading}
-                    />
+                    isAuthenticated ? (
+                        <CompleteCollectionSection
+                            collectionArtists={collectionArtists}
+                            ownedMasterIds={ownedMasterIds}
+                            ownedTitlesByArtist={ownedTitlesByArtist}
+                            collectionByArtist={collectionByArtist}
+                            collectionLoading={collectionLoading}
+                        />
+                    ) : (
+                        <CompleteCollectionPreview onConnect={onRequireLogin} />
+                    )
                 )}
                 {activeTab === 'wantlist' && (
-                    <WantlistSection />
+                    isAuthenticated ? (
+                        <WantlistSection />
+                    ) : (
+                        <WantlistPreview onConnect={onRequireLogin} />
+                    )
                 )}
                 {activeTab === 'shopLocal' && (
                     <ShopLocalSection />
