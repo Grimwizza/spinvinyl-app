@@ -42,7 +42,7 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['api/**/*.js', 'vite.config.js', 'vite-api-proxy.js', '.eslintrc.cjs'],
+      files: ['api/**/*.js', 'vite.config.js', 'vite-api-proxy.js', '.eslintrc.cjs', 'playwright.config.js', 'tests/**/*.js'],
       env: { node: true },
     }
   ],

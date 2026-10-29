@@ -6,3 +6,7 @@ dist
 *.local
 .vercel
 .env*.local
+test-results
+playwright-report
+blob-report
+playwright/.cache
