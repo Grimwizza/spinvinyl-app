@@ -1,8 +1,14 @@
-import * as cheerio from 'cheerio';
+import { createRequire } from 'module';
+import { patchEntitiesGeneratedResolution } from './upcoming.js';
+
+// cheerio must be loaded via CJS require() after patching entities resolution —
+// a top-level ESM `import * as cheerio` crashes the function at cold start in
+// production (FUNCTION_INVOCATION_FAILED). See the debug history in api/upcoming.js.
+const require = createRequire(import.meta.url);
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-    
+
     const { url } = req.query;
     if (!url || !url.startsWith('https://upcomingvinyl.com/record/')) {
         return res.status(400).json({ error: 'Invalid URL' });
@@ -20,10 +26,12 @@ export default async function handler(req, res) {
         if (!response.ok) throw new Error('Failed to fetch detail page');
 
         const html = await response.text();
+        patchEntitiesGeneratedResolution();
+        const cheerio = require('cheerio');
         const $ = cheerio.load(html);
 
         const description = $('.item.description .desc').text().trim();
-        
+
         const tracklist = [];
         $('.tracklist li span').each((_, el) => {
             tracklist.push($(el).text().trim());

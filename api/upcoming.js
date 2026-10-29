@@ -39,8 +39,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // no-op the moment Vercel's bundling is ever fixed — and only falls back
 // to the equivalent file in the vendored copy when resolution fails for a
 // request originating from somewhere inside the real entities package.
+// Exported so other cheerio-using functions (api/upcoming-detail.js) can
+// apply the same fix — a plain `import * as cheerio` crashes at cold start.
 let entitiesResolutionPatched = false;
-function patchEntitiesGeneratedResolution() {
+export function patchEntitiesGeneratedResolution() {
     if (entitiesResolutionPatched) return;
     entitiesResolutionPatched = true;
     try {
